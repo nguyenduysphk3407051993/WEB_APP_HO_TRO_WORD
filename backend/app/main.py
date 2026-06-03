@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import admin, convert, ocr
-from app.services.gemini_pool import init_pool
+from app.services.gemini_pool import GeminiKeyPool, init_pool
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,13 +20,25 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    keys = settings.gemini_keys_list
-    if not keys:
-        logger.warning("⚠ Chưa có GEMINI_API_KEYS — OCR sẽ không hoạt động!")
+    # Ưu tiên load từ file persistent, fallback về env
+    keys_from_file = GeminiKeyPool.load_keys_from_file(settings.KEYS_FILE)
+    keys = keys_from_file or settings.gemini_keys_list
+    source = "file" if keys_from_file else ("env" if keys else "none")
+
+    # Luôn init pool — kể cả khi rỗng — để API admin có thể thêm key lúc runtime
+    init_pool(
+        keys,
+        max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY,
+        persist_path=settings.KEYS_FILE,
+    )
+    if keys:
+        logger.info("Pool sẵn sàng: %d key từ %s (model=%s).",
+                    len(keys), source, settings.GEMINI_MODEL)
     else:
-        init_pool(keys, max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY)
-        logger.info("Gemini pool sẵn sàng với %d key (model=%s).",
-                    len(keys), settings.GEMINI_MODEL)
+        logger.warning("⚠ Pool rỗng — vào /admin trên web để thêm key.")
+
+    if not settings.ADMIN_PASSWORD:
+        logger.warning("⚠ ADMIN_PASSWORD chưa set — trang quản lý key sẽ bị khoá.")
     yield
 
 

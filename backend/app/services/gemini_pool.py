@@ -1,21 +1,13 @@
-"""Pool quản lý nhiều API key Gemini với failover tự động.
-
-State machine của mỗi key:
-    ACTIVE ──429 (phút)──► RATE_LIMITED (cooldown 60s) ──hết hạn──► ACTIVE
-    ACTIVE ──quota ngày──► QUOTA_EXCEEDED (cooldown 6h) ──hết hạn──► ACTIVE
-    ACTIVE ──401/403────► INVALID (chết hẳn)
-
-Chiến lược chọn key: round-robin trong các key ACTIVE, giới hạn số request
-đồng thời mỗi key bằng asyncio.Semaphore để tránh vượt RPM của Gemini free
-(15 req/phút/key cho gemini-2.0-flash).
-"""
+"""Pool quản lý nhiều API key Gemini với failover, persist file, hot-reload."""
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -23,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 class KeyState(str, Enum):
     ACTIVE = "active"
-    RATE_LIMITED = "rate_limited"          # 429 transient — đợi vài chục giây
-    QUOTA_EXCEEDED = "quota_exceeded"       # quota ngày hết — đợi vài giờ
-    INVALID = "invalid"                     # 401/403 — key chết, không retry
+    RATE_LIMITED = "rate_limited"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    INVALID = "invalid"
 
 
 @dataclass
@@ -52,70 +44,83 @@ class ApiKey:
 
 
 class GeminiKeyPool:
-    """Pool quản lý nhiều API key với failover và load balancing."""
+    """Pool có persistence và hot-reload."""
 
-    def __init__(self, keys: list[str], max_concurrent_per_key: int = 3) -> None:
-        if not keys:
-            raise ValueError("Cần ít nhất 1 API key Gemini.")
-        self._keys: list[ApiKey] = [
-            ApiKey(
-                key=k,
-                index=i,
-                semaphore=asyncio.Semaphore(max_concurrent_per_key),
-            )
-            for i, k in enumerate(keys)
-        ]
+    def __init__(
+        self,
+        keys: list[str],
+        max_concurrent_per_key: int = 3,
+        persist_path: Optional[Path] = None,
+    ) -> None:
+        self._max_concurrent = max_concurrent_per_key
+        self._persist_path = persist_path
         self._cursor = 0
         self._lock = asyncio.Lock()
-        logger.info("Khởi tạo pool với %d key, max_concurrent_per_key=%d",
+        self._keys: list[ApiKey] = []
+        self._build_keys(keys)
+        logger.info("Pool khởi tạo với %d key (max_concurrent_per_key=%d)",
                     len(self._keys), max_concurrent_per_key)
 
-    async def acquire(self, wait_timeout: float = 300.0) -> ApiKey:
-        """Lấy 1 key khả dụng, đợi tối đa wait_timeout giây nếu tất cả đều cooldown.
+    def _build_keys(self, keys: list[str]) -> None:
+        self._keys = [
+            ApiKey(key=k.strip(), index=i, semaphore=asyncio.Semaphore(self._max_concurrent))
+            for i, k in enumerate(keys) if k.strip()
+        ]
 
-        Raises:
-            RuntimeError: nếu hết toàn bộ key hoặc timeout đợi.
-        """
+    def _persist(self) -> None:
+        if not self._persist_path:
+            return
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            self._persist_path.write_text(
+                json.dumps({"keys": [k.key for k in self._keys]}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.exception("Không lưu được keys vào %s", self._persist_path)
+
+    @classmethod
+    def load_keys_from_file(cls, path: Path) -> list[str]:
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return [k for k in data.get("keys", []) if isinstance(k, str) and k.strip()]
+        except Exception:
+            logger.exception("Không đọc được %s", path)
+            return []
+
+    async def acquire(self, wait_timeout: float = 300.0) -> ApiKey:
+        if not self._keys:
+            raise RuntimeError("Pool chưa có API key nào. Vào trang Admin để thêm.")
+
         start = time.time()
-        backoff = 1.0
         while True:
             now = time.time()
             async with self._lock:
-                # Refresh state: chuyển key đã hết cooldown về ACTIVE
                 for k in self._keys:
-                    if k.state in (KeyState.RATE_LIMITED, KeyState.QUOTA_EXCEEDED):
-                        if now >= k.cooldown_until:
-                            logger.info("Key %s hết cooldown, set ACTIVE", k.preview)
-                            k.state = KeyState.ACTIVE
-
-                # Lọc key dùng được
+                    if k.state in (KeyState.RATE_LIMITED, KeyState.QUOTA_EXCEEDED) and now >= k.cooldown_until:
+                        k.state = KeyState.ACTIVE
                 candidates = [k for k in self._keys if k.state == KeyState.ACTIVE]
-
-                if not candidates:
-                    invalid_count = sum(1 for k in self._keys if k.state == KeyState.INVALID)
-                    if invalid_count == len(self._keys):
-                        raise RuntimeError(
-                            f"Tất cả {len(self._keys)} key Gemini đều không hợp lệ. "
-                            "Kiểm tra lại GEMINI_API_KEYS."
-                        )
-                    next_cooldown = min(
-                        (k.cooldown_until for k in self._keys
-                         if k.state in (KeyState.RATE_LIMITED, KeyState.QUOTA_EXCEEDED)),
-                        default=now + 60,
-                    )
-                    wait_for = max(1.0, min(next_cooldown - now, 10.0))
-                else:
-                    # Round-robin: pick key tiếp theo trong danh sách candidates
+                if candidates:
                     self._cursor = (self._cursor + 1) % len(candidates)
                     chosen = candidates[self._cursor]
                     chosen.used_count += 1
                     return chosen
+                invalid_count = sum(1 for k in self._keys if k.state == KeyState.INVALID)
+                if invalid_count == len(self._keys):
+                    raise RuntimeError("Tất cả key đều không hợp lệ. Cập nhật trong trang Admin.")
+                next_cd = min(
+                    (k.cooldown_until for k in self._keys
+                     if k.state in (KeyState.RATE_LIMITED, KeyState.QUOTA_EXCEEDED)),
+                    default=now + 30,
+                )
+                wait_for = max(1.0, min(next_cd - now, 10.0))
 
             if time.time() - start > wait_timeout:
-                raise RuntimeError("Timeout đợi key Gemini khả dụng.")
+                raise RuntimeError("Timeout đợi key khả dụng.")
             logger.warning("Tất cả key đang cooldown, đợi %.1fs", wait_for)
             await asyncio.sleep(wait_for)
-            backoff = min(backoff * 1.5, 10.0)
 
     async def report_success(self, key: ApiKey) -> None:
         async with self._lock:
@@ -125,28 +130,69 @@ class GeminiKeyPool:
 
     async def report_error(self, key: ApiKey, exc: Exception) -> None:
         msg = str(exc)
-        msg_lower = msg.lower()
+        m = msg.lower()
         async with self._lock:
             key.error_count += 1
             key.last_error = msg[:200]
-
-            # Phân loại lỗi
-            if any(s in msg_lower for s in ("permission denied", "api key not valid",
-                                             "invalid api key", "401", "403")):
+            if any(s in m for s in ("permission denied", "api key not valid", "invalid api key", "401", "403")):
                 key.state = KeyState.INVALID
-                logger.error("Key %s INVALID: %s", key.preview, msg[:120])
-            elif "quota" in msg_lower and ("exceeded" in msg_lower or "exhausted" in msg_lower):
+                logger.error("Key %s INVALID: %s", key.preview, msg[:100])
+            elif "quota" in m and ("exceeded" in m or "exhausted" in m):
                 key.state = KeyState.QUOTA_EXCEEDED
                 key.cooldown_until = time.time() + 6 * 3600
-                logger.warning("Key %s QUOTA_EXCEEDED, cooldown 6h", key.preview)
-            elif "429" in msg or "resource_exhausted" in msg_lower or "rate" in msg_lower:
+                logger.warning("Key %s QUOTA_EXCEEDED 6h", key.preview)
+            elif "429" in msg or "resource_exhausted" in m or "rate" in m:
                 key.state = KeyState.RATE_LIMITED
-                # Nếu Gemini trả về retry-after, có thể parse, không thì 60s
                 key.cooldown_until = time.time() + 60
-                logger.warning("Key %s RATE_LIMITED, cooldown 60s", key.preview)
-            else:
-                # Lỗi khác không phải fault của key (network, server) — không cooldown
-                logger.warning("Key %s lỗi tạm thời: %s", key.preview, msg[:120])
+                logger.warning("Key %s RATE_LIMITED 60s", key.preview)
+
+    # ============ CRUD ============
+
+    async def replace_all(self, keys: list[str]) -> int:
+        """Thay toàn bộ danh sách key (giữ semaphore mặc định)."""
+        clean = [k.strip() for k in keys if k.strip()]
+        async with self._lock:
+            self._build_keys(clean)
+            self._cursor = 0
+            self._persist()
+        logger.info("Pool replace_all → %d key", len(clean))
+        return len(clean)
+
+    async def add_key(self, key: str) -> int:
+        key = key.strip()
+        if not key:
+            raise ValueError("Key rỗng.")
+        async with self._lock:
+            if any(k.key == key for k in self._keys):
+                raise ValueError("Key đã tồn tại trong pool.")
+            self._keys.append(ApiKey(
+                key=key, index=len(self._keys),
+                semaphore=asyncio.Semaphore(self._max_concurrent),
+            ))
+            self._persist()
+        return len(self._keys)
+
+    async def remove_key(self, index: int) -> int:
+        async with self._lock:
+            if not (0 <= index < len(self._keys)):
+                raise ValueError(f"Index {index} không hợp lệ.")
+            removed = self._keys.pop(index)
+            for i, k in enumerate(self._keys):
+                k.index = i
+            self._persist()
+        logger.info("Đã xoá key %s", removed.preview)
+        return len(self._keys)
+
+    async def reset_key(self, index: int) -> None:
+        """Reset state về ACTIVE (dùng khi muốn thử lại key bị cooldown ngay)."""
+        async with self._lock:
+            if not (0 <= index < len(self._keys)):
+                raise ValueError(f"Index {index} không hợp lệ.")
+            k = self._keys[index]
+            k.state = KeyState.ACTIVE
+            k.cooldown_until = 0
+            k.error_count = 0
+            k.last_error = ""
 
     def stats(self) -> dict:
         return {
@@ -174,15 +220,34 @@ class GeminiKeyPool:
 _pool: Optional[GeminiKeyPool] = None
 
 
-def init_pool(keys: list[str], max_concurrent_per_key: int = 3) -> GeminiKeyPool:
+def init_pool(keys: list[str], max_concurrent_per_key: int = 3,
+              persist_path: Optional[Path] = None) -> GeminiKeyPool:
     global _pool
-    _pool = GeminiKeyPool(keys, max_concurrent_per_key)
+    _pool = GeminiKeyPool(keys, max_concurrent_per_key, persist_path)
     return _pool
 
 
 def get_pool() -> GeminiKeyPool:
     if _pool is None:
-        raise RuntimeError(
-            "Gemini pool chưa khởi tạo. Đảm bảo GEMINI_API_KEYS được set trong .env."
-        )
+        raise RuntimeError("Pool chưa init.")
     return _pool
+
+
+async def test_single_key(key: str, model: str, timeout: float = 30.0) -> dict:
+    """Gọi thử Gemini với 1 key để verify. Trả về {ok, message}."""
+    from google import genai
+    try:
+        client = genai.Client(api_key=key.strip())
+        resp = await asyncio.wait_for(
+            client.aio.models.generate_content(
+                model=model,
+                contents=["Reply with only the word: OK"],
+            ),
+            timeout=timeout,
+        )
+        text = (resp.text or "").strip()
+        return {"ok": True, "message": f"Gemini phản hồi: {text[:50]}"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "message": "Timeout"}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)[:200]}

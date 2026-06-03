@@ -3,14 +3,14 @@ import OcrTab from "./components/OcrTab";
 import LatexToMathTypeTab from "./components/LatexToMathTypeTab";
 import LatexToEquationTab from "./components/LatexToEquationTab";
 import DocxToLatexTab from "./components/DocxToLatexTab";
-import KeyStatsPanel from "./components/KeyStatsPanel";
+import AdminKeysTab from "./components/AdminKeysTab";
 
 const TABS = [
   { id: "ocr", label: "PDF / Ảnh → LaTeX", component: OcrTab },
   { id: "mathtype", label: "LaTeX → MathType", component: LatexToMathTypeTab },
   { id: "equation", label: "LaTeX → Word Equation", component: LatexToEquationTab },
   { id: "docx2tex", label: "Word/MathType → LaTeX", component: DocxToLatexTab },
-  { id: "keys", label: "Trạng thái API Keys", component: KeyStatsPanel },
+  { id: "admin", label: "🔑 Quản lý API Keys", component: AdminKeysTab },
 ];
 
 export default function App() {
@@ -23,7 +23,7 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-6 py-5">
           <h1 className="text-2xl font-bold">Bộ chuyển đổi tài liệu</h1>
           <p className="text-indigo-100 text-sm mt-1">
-            PDF / Ảnh ↔ LaTeX ↔ MathType ↔ Word Equation — tự host bằng Docker
+            PDF / Ảnh ↔ LaTeX ↔ MathType ↔ Word Equation · Powered by Gemini API pool
           </p>
         </div>
       </header>
@@ -51,7 +51,7 @@ export default function App() {
       </main>
 
       <footer className="text-center text-xs text-slate-500 py-4">
-        Stack: FastAPI · pix2tex · pandoc · React · Tailwind. Docker-ready.
+        FastAPI + Gemini Pool · React + Tailwind · Traefik
       </footer>
     </div>
   );
