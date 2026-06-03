@@ -2,22 +2,26 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: "/api",
-  timeout: 120000,
+  timeout: 300000,
 });
 
-export const ocrImage = async (file) => {
+export const ocrImage = async (file, mode = "single") => {
   const fd = new FormData();
   fd.append("file", file);
+  fd.append("mode", mode);
   const { data } = await api.post("/ocr/image", fd, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;
 };
 
-export const ocrPdf = async (file, dpi = 200) => {
+export const ocrPdf = async (file, { dpi = 200, mode = "page", maxConcurrent = 10 } = {}) => {
   const fd = new FormData();
   fd.append("file", file);
-  const { data } = await api.post(`/ocr/pdf?dpi=${dpi}`, fd, {
+  fd.append("dpi", dpi);
+  fd.append("mode", mode);
+  fd.append("max_concurrent", maxConcurrent);
+  const { data } = await api.post("/ocr/pdf", fd, {
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;

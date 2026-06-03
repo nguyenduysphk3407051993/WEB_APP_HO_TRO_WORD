@@ -5,10 +5,13 @@ services:
     container_name: doc-converter-backend
     restart: unless-stopped
     environment:
-      - USE_GPU=false
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - GEMINI_MAX_CONCURRENT_PER_KEY=${GEMINI_MAX_CONCURRENT_PER_KEY:-3}
+      - GEMINI_RETRY_ATTEMPTS=${GEMINI_RETRY_ATTEMPTS:-3}
+      - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-120}
     volumes:
       - ./data:/app/data
-      - model-cache:/root/.cache
     expose:
       - "8000"
     healthcheck:
@@ -55,5 +58,3 @@ networks:
     external: true
     name: ${TRAEFIK_NETWORK:-traefik-network}
 
-volumes:
-  model-cache:

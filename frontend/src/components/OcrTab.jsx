@@ -6,6 +6,8 @@ import { ocrImage, ocrPdf } from "../api";
 
 export default function OcrTab() {
   const [mode, setMode] = useState("image");
+  const [ocrMode, setOcrMode] = useState("single");
+  const [maxConcurrent, setMaxConcurrent] = useState(10);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -15,7 +17,10 @@ export default function OcrTab() {
     setResult(null);
     setLoading(true);
     try {
-      const data = mode === "image" ? await ocrImage(file) : await ocrPdf(file);
+      const data =
+        mode === "image"
+          ? await ocrImage(file, ocrMode)
+          : await ocrPdf(file, { mode: "page", maxConcurrent });
       setResult(data);
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
@@ -47,20 +52,51 @@ export default function OcrTab() {
         ))}
       </div>
 
+      {mode === "image" && (
+        <div className="flex items-center gap-3 text-sm">
+          <label className="font-medium text-slate-700">Chế độ:</label>
+          <select
+            value={ocrMode}
+            onChange={(e) => setOcrMode(e.target.value)}
+            className="border border-slate-300 rounded px-2 py-1"
+          >
+            <option value="single">Chỉ 1 công thức (trả LaTeX thuần)</option>
+            <option value="page">Cả trang (giữ cấu trúc văn bản + công thức)</option>
+          </select>
+        </div>
+      )}
+
+      {mode === "pdf" && (
+        <div className="flex items-center gap-3 text-sm">
+          <label className="font-medium text-slate-700">Trang xử lý song song:</label>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={maxConcurrent}
+            onChange={(e) => setMaxConcurrent(Number(e.target.value))}
+            className="border border-slate-300 rounded px-2 py-1 w-20"
+          />
+          <span className="text-slate-500">
+            (mỗi key Gemini gánh ~3 req đồng thời, có 10 key → max ~30)
+          </span>
+        </div>
+      )}
+
       <Dropzone
         onFile={handleFile}
         accept={accept}
         hint={
           mode === "image"
             ? "PNG, JPG, JPEG, BMP, TIFF, WEBP (≤ 50MB)"
-            : "PDF nhiều trang — mỗi trang sẽ được OCR riêng"
+            : "PDF nhiều trang — các trang được dispatch song song lên Gemini key pool"
         }
       />
 
       {loading && (
         <div className="flex items-center gap-3 text-indigo-600">
           <span className="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full" />
-          Đang OCR... (lần đầu sẽ tải model ~80MB)
+          Đang gọi Gemini API...
         </div>
       )}
 
@@ -70,14 +106,17 @@ export default function OcrTab() {
         </div>
       )}
 
-      {result?.latex !== undefined && (
-        <ResultBlock latex={result.latex} />
-      )}
+      {result?.latex !== undefined && <ResultBlock latex={result.latex} />}
 
       {result?.pages?.map((p) => (
         <div key={p.page} className="space-y-2">
-          <h3 className="font-semibold">Trang {p.page}</h3>
-          <ResultBlock latex={p.latex} />
+          <h3 className="font-semibold">
+            Trang {p.page}
+            {p.error && (
+              <span className="ml-2 text-xs text-red-600">(lỗi: {p.error})</span>
+            )}
+          </h3>
+          {p.latex && <ResultBlock latex={p.latex} />}
         </div>
       ))}
     </div>

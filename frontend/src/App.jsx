@@ -3,12 +3,14 @@ import OcrTab from "./components/OcrTab";
 import LatexToMathTypeTab from "./components/LatexToMathTypeTab";
 import LatexToEquationTab from "./components/LatexToEquationTab";
 import DocxToLatexTab from "./components/DocxToLatexTab";
+import KeyStatsPanel from "./components/KeyStatsPanel";
 
 const TABS = [
   { id: "ocr", label: "PDF / Ảnh → LaTeX", component: OcrTab },
   { id: "mathtype", label: "LaTeX → MathType", component: LatexToMathTypeTab },
   { id: "equation", label: "LaTeX → Word Equation", component: LatexToEquationTab },
   { id: "docx2tex", label: "Word/MathType → LaTeX", component: DocxToLatexTab },
+  { id: "keys", label: "Trạng thái API Keys", component: KeyStatsPanel },
 ];
 
 export default function App() {
