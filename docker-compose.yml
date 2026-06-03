@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: doc-converter-backend
+    restart: unless-stopped
+    environment:
+      - USE_GPU=false
+    volumes:
+      - ./data:/app/data
+      - model-cache:/root/.cache
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    networks:
+      - app-net
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: doc-converter-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    # Chỉ bind vào localhost — system nginx của VPS sẽ reverse proxy vào port này
+    ports:
+      - "127.0.0.1:3000:80"
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  model-cache:
