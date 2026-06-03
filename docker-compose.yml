@@ -27,15 +27,33 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    # Chỉ bind vào localhost — system nginx của VPS sẽ reverse proxy vào port này
-    ports:
-      - "127.0.0.1:3000:80"
     networks:
       - app-net
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-network}"
+
+      # HTTPS router — Traefik đã tự redirect HTTP→HTTPS ở entrypoint `web`
+      - "traefik.http.routers.doc-converter.rule=Host(`${APP_DOMAIN:-app.edutechnd.io.vn}`)"
+      - "traefik.http.routers.doc-converter.entrypoints=${TRAEFIK_HTTPS_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.doc-converter.tls=true"
+      - "traefik.http.routers.doc-converter.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+
+      # Service: trỏ về cổng 80 của container frontend (nginx serve SPA + proxy /api → backend)
+      - "traefik.http.services.doc-converter.loadbalancer.server.port=80"
+
+      # Cho phép upload file lớn (50MB + buffer = 60MB)
+      - "traefik.http.middlewares.doc-converter-bodylimit.buffering.maxRequestBodyBytes=62914560"
+      - "traefik.http.middlewares.doc-converter-bodylimit.buffering.memRequestBodyBytes=10485760"
+      - "traefik.http.routers.doc-converter.middlewares=doc-converter-bodylimit"
 
 networks:
   app-net:
     driver: bridge
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik-network}
 
 volumes:
   model-cache:

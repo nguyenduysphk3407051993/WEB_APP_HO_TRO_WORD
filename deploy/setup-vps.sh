@@ -63,8 +63,25 @@ ln -sf "${NGINX_CONF}" "/etc/nginx/sites-enabled/${DOMAIN}"
 # Webroot cho certbot
 mkdir -p /var/www/certbot
 
+# Đảm bảo nginx đang chạy và auto-start khi reboot
+systemctl enable nginx
+if ! systemctl is-active --quiet nginx; then
+  log "Nginx chưa chạy — kiểm tra port 80..."
+  if ss -tlnp 2>/dev/null | grep -q ':80 '; then
+    err "Port 80 đã bị tiến trình khác chiếm. Kiểm tra: sudo ss -tlnp | grep :80"
+    err "Thường là Apache: sudo systemctl disable --now apache2"
+    exit 1
+  fi
+  systemctl start nginx
+fi
+
 nginx -t
-systemctl reload nginx
+# Dùng reload nếu đang chạy, restart nếu vừa start
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+else
+  systemctl restart nginx
+fi
 
 # ============ 5. SSL với Let's Encrypt ============
 log "Lấy chứng chỉ SSL cho ${DOMAIN}..."
