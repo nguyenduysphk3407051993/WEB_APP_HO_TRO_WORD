@@ -24,9 +24,9 @@ export default function CopyButton({ text, label = "Copy" }) {
     <button
       onClick={handleCopy}
       disabled={!text}
-      className="px-3 py-1.5 text-sm rounded-md bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-40 transition"
+      className="rounded-md bg-slate-800 px-3 py-1.5 text-sm text-white transition hover:bg-slate-700 disabled:opacity-40"
     >
-      {copied ? "Đã copy ✓" : label}
+      {copied ? "Da copy ✓" : label}
     </button>
   );
 }
