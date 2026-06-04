@@ -52,6 +52,7 @@ def _serialize_formula(
 ) -> dict:
     mathml = None
     mathml_error = None
+    latex_source = _format_latex_source(latex, display=display)
     try:
         mathml = converter_service.latex_to_mathml(latex, display=display)
     except Exception as exc:  # pragma: no cover - phu thuoc tung cong thuc dau vao
@@ -62,10 +63,29 @@ def _serialize_formula(
         "page": page,
         "order": order,
         "latex": latex,
+        "latex_source": latex_source,
         "display": display,
         "mathml": mathml,
         "mathml_error": mathml_error,
     }
+
+
+def _format_latex_source(latex: str, *, display: bool) -> str:
+    latex = latex.strip()
+    if display:
+        return f"\\[\n{latex}\n\\]"
+    return f"${latex}$"
+
+
+def _build_latex_output(formulas: list[dict]) -> str:
+    return "\n\n".join(
+        formula.get("latex_source") or _format_latex_source(
+            formula.get("latex", ""),
+            display=bool(formula.get("display")),
+        )
+        for formula in formulas
+        if formula.get("latex")
+    )
 
 
 def _build_formula_catalog(page_entries: list[dict], content_field: str) -> tuple[list[dict], list[dict]]:
@@ -118,6 +138,7 @@ def _build_docx_payload(
         "filename": filename,
         "download_url": _build_download_url(output_path),
         "total_formulas": len(formulas),
+        "latex_output": _build_latex_output(formulas),
         "pages": pages,
         "formulas": formulas,
         "errors": sum(1 for page in pages if page.get("error")),

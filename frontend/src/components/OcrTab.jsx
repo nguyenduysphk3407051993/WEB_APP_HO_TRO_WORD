@@ -245,6 +245,8 @@ function WordResultBlock({ result, onDownloadAgain }) {
         </div>
       </div>
 
+      <LatexOutputPanel latexOutput={result.latex_output} />
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-slate-700">
@@ -263,6 +265,32 @@ function WordResultBlock({ result, onDownloadAgain }) {
           <FormulaCard key={formula.id} formula={formula} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function LatexOutputPanel({ latexOutput }) {
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-700">LaTeX cho togeTex</h4>
+          <p className="text-sm text-slate-500">
+            Cong thuc duoc gom thanh mot khoi LaTeX rieng de dua qua cong cu xu ly tiep.
+          </p>
+        </div>
+        <CopyButton text={latexOutput || ""} label="Copy tat ca LaTeX" />
+      </div>
+
+      {latexOutput ? (
+        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-sm text-emerald-300">
+          {latexOutput}
+        </pre>
+      ) : (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Chua co cong thuc LaTeX de xuat sang togeTex.
+        </div>
+      )}
     </div>
   );
 }
@@ -290,15 +318,16 @@ function FormulaCard({ formula }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <CopyButton text={formula.latex} label="Copy LaTeX" />
+          <CopyButton text={formula.latex_source || formula.latex} label="Copy LaTeX" />
+          <CopyButton text={formula.latex} label="Copy raw" />
           <CopyButton text={formula.mathml || ""} label="Copy MathML" />
         </div>
       </div>
 
       <div className="space-y-2">
-        <div className="text-sm font-semibold text-slate-700">LaTeX</div>
+        <div className="text-sm font-semibold text-slate-700">LaTeX cho togeTex</div>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-slate-900 p-3 text-sm text-emerald-300">
-          {formula.latex}
+          {formula.latex_source || formula.latex}
         </pre>
       </div>
 
