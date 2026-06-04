@@ -51,6 +51,8 @@ QUY TAC:
 8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
 9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
 10. Khong them code fence, khong giai thich, khong chen nhan xet.
+11. Neu la cau trac nghiem co phuong an A., B., C., D. thi dat moi phuong an tren mot dong rieng.
+12. Neu co cac y nho a., b., c., d. hoac a), b), c), d) thi dat moi y tren mot dong rieng.
 
 CHI TRA VE NOI DUNG MARKDOWN."""
 
@@ -67,6 +69,8 @@ QUY TAC:
 8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
 9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
 10. Khong them code fence, khong them loi mo dau/ket luan, khong giai thich.
+11. Neu la cau trac nghiem co phuong an A., B., C., D. thi dat moi phuong an tren mot dong rieng.
+12. Neu co cac y nho a., b., c., d. hoac a), b), c), d) thi dat moi y tren mot dong rieng.
 
 CHI TRA VE NOI DUNG MARKDOWN."""
 
