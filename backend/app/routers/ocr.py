@@ -52,6 +52,8 @@ def _serialize_formula(
 ) -> dict:
     mathml = None
     mathml_error = None
+    raw_latex = latex.strip()
+    latex = converter_service.sanitize_toggle_tex_latex(raw_latex)
     latex_source = _format_latex_source(latex, display=display)
     try:
         mathml = converter_service.latex_to_mathml(latex, display=display)
@@ -63,6 +65,7 @@ def _serialize_formula(
         "page": page,
         "order": order,
         "latex": latex,
+        "raw_latex": raw_latex,
         "latex_source": latex_source,
         "display": display,
         "mathml": mathml,

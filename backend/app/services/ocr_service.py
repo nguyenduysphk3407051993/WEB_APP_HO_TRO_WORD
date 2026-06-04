@@ -48,7 +48,9 @@ QUY TAC:
 5. Danh sach dung - hoac 1.
 6. Bang ro rang thi dung bang Markdown.
 7. Tieng Viet giu nguyen dau, khong dich.
-8. Khong them code fence, khong giai thich, khong chen nhan xet.
+8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
+9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
+10. Khong them code fence, khong giai thich, khong chen nhan xet.
 
 CHI TRA VE NOI DUNG MARKDOWN."""
 
@@ -62,7 +64,9 @@ QUY TAC:
 5. Bang ro rang thi dung bang Markdown.
 6. Cong thuc inline dung $...$, cong thuc rieng dong dung $$...$$.
 7. Tieng Viet giu nguyen dau, khong dich.
-8. Khong them code fence, khong them loi mo dau/ket luan, khong giai thich.
+8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
+9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
+10. Khong them code fence, khong them loi mo dau/ket luan, khong giai thich.
 
 CHI TRA VE NOI DUNG MARKDOWN."""
 

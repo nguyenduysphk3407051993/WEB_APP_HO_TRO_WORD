@@ -320,10 +320,17 @@ function FormulaCard({ formula }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <CopyButton text={formula.latex_source || formula.latex} label="Copy LaTeX" />
-          <CopyButton text={formula.latex} label="Copy raw" />
+          <CopyButton text={formula.raw_latex || formula.latex} label="Copy OCR goc" />
           <CopyButton text={formula.mathml || ""} label="Copy MathML" />
         </div>
       </div>
+
+      {formula.raw_latex && formula.raw_latex !== formula.latex && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Cong thuc nay da duoc lam sach tieng Viet/Unicode trong vung TeX de MathType Toggle
+          TeX xu ly on dinh hon.
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="text-sm font-semibold text-slate-700">LaTeX cho Toggle TeX</div>

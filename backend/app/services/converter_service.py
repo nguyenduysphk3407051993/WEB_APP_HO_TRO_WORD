@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 import pypandoc
@@ -19,6 +20,49 @@ _MARKDOWN_TOGGLE_TEX_DOCX_FORMAT = (
 )
 _DISPLAY_BRACKET_RE = re.compile(r"\\\[(.+?)\\\]", re.DOTALL)
 _INLINE_PAREN_RE = re.compile(r"\\\((.+?)\\\)", re.DOTALL)
+_DOLLAR_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_DOLLAR_INLINE_RE = re.compile(
+    r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
+    re.DOTALL,
+)
+_UNICODE_TEX_REPLACEMENTS = {
+    "≤": r"\le ",
+    "≥": r"\ge ",
+    "≠": r"\ne ",
+    "≈": r"\approx ",
+    "×": r"\times ",
+    "÷": r"\div ",
+    "·": r"\cdot ",
+    "±": r"\pm ",
+    "∞": r"\infty ",
+    "∈": r"\in ",
+    "∉": r"\notin ",
+    "⊂": r"\subset ",
+    "⊆": r"\subseteq ",
+    "∪": r"\cup ",
+    "∩": r"\cap ",
+    "∀": r"\forall ",
+    "∃": r"\exists ",
+    "→": r"\to ",
+    "⇒": r"\Rightarrow ",
+    "⇔": r"\Leftrightarrow ",
+    "∑": r"\sum ",
+    "∫": r"\int ",
+    "√": r"\sqrt ",
+    "π": r"\pi ",
+    "α": r"\alpha ",
+    "β": r"\beta ",
+    "γ": r"\gamma ",
+    "δ": r"\delta ",
+    "Δ": r"\Delta ",
+    "θ": r"\theta ",
+    "λ": r"\lambda ",
+    "μ": r"\mu ",
+    "Ω": r"\Omega ",
+    "–": "-",
+    "—": "-",
+    "−": "-",
+}
 
 
 class ConverterService:
@@ -119,16 +163,39 @@ class ConverterService:
 
     @staticmethod
     def _normalize_toggle_tex_markdown(markdown_content: str) -> str:
-        """Dua delimiter ve $...$/$$...$$ de MathType Toggle TeX xu ly hang loat."""
+        """Dua delimiter ve $...$/$$...$$ va lam sach TeX cho MathType Toggle TeX."""
+        markdown_content = _DOLLAR_BLOCK_RE.sub(
+            lambda match: f"$$\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n$$",
+            markdown_content,
+        )
         markdown_content = _DISPLAY_BRACKET_RE.sub(
-            lambda match: f"$$\n{match.group(1).strip()}\n$$",
+            lambda match: f"$$\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n$$",
             markdown_content,
         )
         markdown_content = _INLINE_PAREN_RE.sub(
-            lambda match: f"${match.group(1).strip()}$",
+            lambda match: f"${ConverterService.sanitize_toggle_tex_latex(match.group(1))}$",
+            markdown_content,
+        )
+        markdown_content = _DOLLAR_INLINE_RE.sub(
+            lambda match: f"${ConverterService.sanitize_toggle_tex_latex(match.group(1))}$",
             markdown_content,
         )
         return markdown_content
+
+    @staticmethod
+    def sanitize_toggle_tex_latex(latex: str) -> str:
+        """Loai Unicode/tieng Viet trong vung TeX de MathType Toggle TeX on dinh hon."""
+        latex = latex.strip()
+        for source, replacement in _UNICODE_TEX_REPLACEMENTS.items():
+            latex = latex.replace(source, replacement)
+
+        latex = latex.replace("đ", "d").replace("Đ", "D")
+        latex = unicodedata.normalize("NFKD", latex)
+        latex = "".join(char for char in latex if not unicodedata.combining(char))
+        latex = latex.encode("ascii", "ignore").decode("ascii")
+        latex = re.sub(r"[ \t]+", " ", latex)
+        latex = re.sub(r"\s*\n\s*", "\n", latex)
+        return latex.strip()
 
     def docx_to_latex(self, docx_path: Path) -> str:
         """File .docx (chua OMML/Equation) -> LaTeX."""
