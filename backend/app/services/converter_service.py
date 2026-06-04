@@ -13,6 +13,12 @@ _MATHML_TAG_RE = re.compile(r"<math\b[^>]*>.*?</math>", re.DOTALL | re.IGNORECAS
 _MARKDOWN_DOCX_FORMAT = (
     "markdown+raw_tex+tex_math_dollars+pipe_tables+grid_tables"
 )
+_MARKDOWN_TOGGLE_TEX_DOCX_FORMAT = (
+    "markdown-raw_tex-tex_math_dollars-tex_math_single_backslash-"
+    "tex_math_double_backslash+pipe_tables+grid_tables"
+)
+_DISPLAY_BRACKET_RE = re.compile(r"\\\[(.+?)\\\]", re.DOTALL)
+_INLINE_PAREN_RE = re.compile(r"\\\((.+?)\\\)", re.DOTALL)
 
 
 class ConverterService:
@@ -93,6 +99,36 @@ class ConverterService:
             extra_args=["--wrap=preserve"],
         )
         return output_path
+
+    def markdown_to_toggle_tex_docx(
+        self,
+        markdown_content: str,
+        output_path: Path,
+    ) -> Path:
+        """Chuyen Markdown sang DOCX, giu cong thuc o dang TeX text cho MathType Toggle TeX."""
+        payload = self._normalize_toggle_tex_markdown(markdown_content.strip() or " ")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pypandoc.convert_text(
+            payload,
+            "docx",
+            format=_MARKDOWN_TOGGLE_TEX_DOCX_FORMAT,
+            outputfile=str(output_path),
+            extra_args=["--wrap=preserve"],
+        )
+        return output_path
+
+    @staticmethod
+    def _normalize_toggle_tex_markdown(markdown_content: str) -> str:
+        """Dua delimiter ve $...$/$$...$$ de MathType Toggle TeX xu ly hang loat."""
+        markdown_content = _DISPLAY_BRACKET_RE.sub(
+            lambda match: f"$$\n{match.group(1).strip()}\n$$",
+            markdown_content,
+        )
+        markdown_content = _INLINE_PAREN_RE.sub(
+            lambda match: f"${match.group(1).strip()}$",
+            markdown_content,
+        )
+        return markdown_content
 
     def docx_to_latex(self, docx_path: Path) -> str:
         """File .docx (chua OMML/Equation) -> LaTeX."""

@@ -73,8 +73,8 @@ export default function OcrTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        Luong OCR nay uu tien tao file Word, dong thoi liet ke tung cong thuc duoi dang
-        LaTeX va MathML de co the chuyen sang MathType.
+        Luong OCR nay tao file Word voi cong thuc o dang LaTeX text, san sang de
+        MathType xu ly hang loat bang Toggle TeX.
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -97,7 +97,7 @@ export default function OcrTab() {
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="font-medium text-slate-700">Dau ra:</span>
           {[
-            { id: "word", label: "Word + LaTeX/MathML" },
+            { id: "word", label: "Word + Toggle TeX" },
             { id: "latex", label: "LaTeX" },
           ].map((item) => (
             <button
@@ -152,10 +152,10 @@ export default function OcrTab() {
         hint={
           mode === "image"
             ? outputTarget === "word"
-              ? "Tai anh de tao Word va xem danh sach cong thuc LaTeX/MathML."
+              ? "Tai anh de tao Word voi cong thuc LaTeX cho MathType Toggle TeX."
               : "PNG, JPG, JPEG, BMP, TIFF, WEBP (<= 50MB)"
             : outputTarget === "word"
-              ? "Tai PDF de OCR sang Word va tach cong thuc theo trang."
+              ? "Tai PDF de OCR sang Word, giu cong thuc LaTeX cho Toggle TeX."
               : "PDF nhieu trang - tra ket qua LaTeX theo tung trang."
         }
       />
@@ -218,9 +218,10 @@ function WordResultBlock({ result, onDownloadAgain }) {
           </button>
         </div>
 
-        <div className="grid gap-3 text-sm text-emerald-900 md:grid-cols-3">
+        <div className="grid gap-3 text-sm text-emerald-900 md:grid-cols-4">
           <SummaryItem label="Loai nguon" value={result.source_type === "pdf" ? "PDF" : "Anh"} />
           <SummaryItem label="Tong cong thuc" value={String(result.total_formulas)} />
+          <SummaryItem label="Dinh dang CT" value="Toggle TeX" />
           <SummaryItem label="Trang loi OCR" value={String(result.errors)} />
         </div>
       </div>
@@ -274,9 +275,9 @@ function LatexOutputPanel({ latexOutput }) {
     <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h4 className="text-sm font-semibold text-slate-700">LaTeX cho togeTex</h4>
+          <h4 className="text-sm font-semibold text-slate-700">LaTeX cho Toggle TeX</h4>
           <p className="text-sm text-slate-500">
-            Cong thuc duoc gom thanh mot khoi LaTeX rieng de dua qua cong cu xu ly tiep.
+            Day cung la dang cong thuc duoc giu trong file Word de MathType xu ly hang loat.
           </p>
         </div>
         <CopyButton text={latexOutput || ""} label="Copy tat ca LaTeX" />
@@ -288,7 +289,7 @@ function LatexOutputPanel({ latexOutput }) {
         </pre>
       ) : (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Chua co cong thuc LaTeX de xuat sang togeTex.
+          Chua co cong thuc LaTeX de xuat sang Toggle TeX.
         </div>
       )}
     </div>
@@ -325,7 +326,7 @@ function FormulaCard({ formula }) {
       </div>
 
       <div className="space-y-2">
-        <div className="text-sm font-semibold text-slate-700">LaTeX cho togeTex</div>
+        <div className="text-sm font-semibold text-slate-700">LaTeX cho Toggle TeX</div>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-slate-900 p-3 text-sm text-emerald-300">
           {formula.latex_source || formula.latex}
         </pre>

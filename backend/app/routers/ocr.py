@@ -139,6 +139,7 @@ def _build_docx_payload(
         "download_url": _build_download_url(output_path),
         "total_formulas": len(formulas),
         "latex_output": _build_latex_output(formulas),
+        "docx_formula_format": "toggle_tex_latex",
         "pages": pages,
         "formulas": formulas,
         "errors": sum(1 for page in pages if page.get("error")),
@@ -187,7 +188,7 @@ async def ocr_image_to_docx(
     download_name = _build_download_name(file.filename, "image-to-word")
     try:
         markdown = await ocr_service.image_to_markdown(content, mode=mode)
-        converter_service.markdown_to_docx(markdown, out)
+        converter_service.markdown_to_toggle_tex_docx(markdown, out)
         formulas, pages = _build_formula_catalog(
             [{"page": 1, "markdown": markdown, "error": None}],
             "markdown",
@@ -253,7 +254,7 @@ async def ocr_pdf_to_docx(
             max_concurrent_pages=max_concurrent,
         )
         markdown = ocr_service.combine_markdown_pages(pages_data)
-        converter_service.markdown_to_docx(markdown, out)
+        converter_service.markdown_to_toggle_tex_docx(markdown, out)
         formulas, pages = _build_formula_catalog(pages_data, "markdown")
     except Exception as exc:
         raise HTTPException(500, f"Loi tao Word tu PDF: {exc}") from exc

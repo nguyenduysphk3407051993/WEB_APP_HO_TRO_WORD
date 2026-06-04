@@ -23,8 +23,8 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-6 py-5">
           <h1 className="text-2xl font-bold">Bo chuyen doi tai lieu</h1>
           <p className="mt-1 text-sm text-emerald-100">
-            PDF / Anh -&gt; Word la luong uu tien, cong thuc van giu duoc cho Word Equation
-            khi OCR nhan dien tot.
+            PDF / Anh -&gt; Word la luong uu tien, cong thuc giu dang LaTeX de xu ly
+            hang loat bang MathType Toggle TeX.
           </p>
         </div>
       </header>
