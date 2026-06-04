@@ -15,7 +15,20 @@ export const ocrImage = async (file, mode = "single") => {
   return data;
 };
 
-export const ocrPdf = async (file, { dpi = 200, mode = "page", maxConcurrent = 10 } = {}) => {
+export const ocrImageToDocx = async (file, mode = "page") => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("mode", mode);
+  const { data } = await api.post("/ocr/image-to-docx", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrPdf = async (
+  file,
+  { dpi = 200, mode = "page", maxConcurrent = 10 } = {}
+) => {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("dpi", dpi);
@@ -25,6 +38,28 @@ export const ocrPdf = async (file, { dpi = 200, mode = "page", maxConcurrent = 1
     headers: { "Content-Type": "multipart/form-data" },
   });
   return data;
+};
+
+export const ocrPdfToDocx = async (
+  file,
+  { dpi = 200, mode = "page", maxConcurrent = 10 } = {}
+) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dpi", dpi);
+  fd.append("mode", mode);
+  fd.append("max_concurrent", maxConcurrent);
+  const { data } = await api.post("/ocr/pdf-to-docx", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const downloadOcrDocx = async (downloadUrl) => {
+  const response = await axios.get(downloadUrl, {
+    responseType: "blob",
+  });
+  return response.data;
 };
 
 export const latexToMathml = async (latex, display = true) => {

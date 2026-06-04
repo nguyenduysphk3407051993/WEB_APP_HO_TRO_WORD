@@ -1,4 +1,4 @@
-"""FastAPI entry: web app chuyển đổi tài liệu với Gemini API pool."""
+"""FastAPI entry cho web app chuyen doi tai lieu voi Gemini API pool."""
 from __future__ import annotations
 
 import logging
@@ -13,32 +13,34 @@ from app.services.gemini_pool import GeminiKeyPool, init_pool
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ưu tiên load từ file persistent, fallback về env
     keys_from_file = GeminiKeyPool.load_keys_from_file(settings.KEYS_FILE)
     keys = keys_from_file or settings.gemini_keys_list
     source = "file" if keys_from_file else ("env" if keys else "none")
 
-    # Luôn init pool — kể cả khi rỗng — để API admin có thể thêm key lúc runtime
     init_pool(
         keys,
         max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY,
         persist_path=settings.KEYS_FILE,
     )
     if keys:
-        logger.info("Pool sẵn sàng: %d key từ %s (model=%s).",
-                    len(keys), source, settings.GEMINI_MODEL)
+        logger.info(
+            "Pool san sang: %d key tu %s (model=%s).",
+            len(keys),
+            source,
+            settings.GEMINI_MODEL,
+        )
     else:
-        logger.warning("⚠ Pool rỗng — vào /admin trên web để thêm key.")
+        logger.warning("Pool rong - vao /admin tren web de them key.")
 
     if not settings.ADMIN_PASSWORD:
-        logger.warning("⚠ ADMIN_PASSWORD chưa set — trang quản lý key sẽ bị khoá.")
+        logger.warning("ADMIN_PASSWORD chua set - trang quan ly key se bi khoa.")
     yield
 
 
@@ -78,8 +80,11 @@ def root() -> dict:
         "version": settings.APP_VERSION,
         "docs": "/docs",
         "endpoints": {
-            "ocr_image": "POST /api/ocr/image",
-            "ocr_pdf": "POST /api/ocr/pdf",
+            "ocr_image_latex": "POST /api/ocr/image",
+            "ocr_image_docx": "POST /api/ocr/image-to-docx",
+            "ocr_pdf_latex": "POST /api/ocr/pdf",
+            "ocr_pdf_docx": "POST /api/ocr/pdf-to-docx",
+            "ocr_download_docx": "GET /api/ocr/download/{file_name}",
             "latex_to_mathtype": "POST /api/convert/latex-to-mathtype",
             "latex_to_docx": "POST /api/convert/latex-to-docx",
             "docx_to_latex": "POST /api/convert/docx-to-latex",
