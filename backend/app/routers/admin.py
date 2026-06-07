@@ -1,4 +1,4 @@
-"""Admin: quản lý API keys Gemini (có mật khẩu bảo vệ)."""
+"""Admin: quản lý kết nối 9router (có mật khẩu bảo vệ)."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services.gemini_pool import get_pool, test_single_key
+from app.services.api_key_pool import get_pool
+from app.services.ninerouter_client import provider_config, test_single_key
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 
@@ -34,6 +35,10 @@ class TestKeysPayload(BaseModel):
     keys: list[str]
 
 
+class ProviderConfigPayload(BaseModel):
+    model: str
+
+
 @router.get("/auth-check")
 def auth_check(_: None = Depends(require_admin)) -> dict:
     """Kiểm tra mật khẩu — frontend dùng để verify trước khi vào trang admin."""
@@ -46,6 +51,22 @@ def keys_stats(_: None = Depends(require_admin)) -> dict:
         return get_pool().stats()
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
+
+
+@router.get("/provider")
+def get_provider(_: None = Depends(require_admin)) -> dict:
+    return provider_config.public_config()
+
+
+@router.put("/provider")
+def update_provider(
+    payload: ProviderConfigPayload, _: None = Depends(require_admin)
+) -> dict:
+    try:
+        provider_config.set_model(payload.model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return provider_config.public_config()
 
 
 @router.post("/keys")
@@ -95,7 +116,7 @@ async def test_keys(
     if not keys:
         raise HTTPException(400, "Không có key để test.")
     results = await asyncio.gather(
-        *[test_single_key(k, settings.GEMINI_MODEL) for k in keys]
+        *[test_single_key(k, provider_config.model) for k in keys]
     )
     masked = [
         {"preview": f"{k[:6]}...{k[-4:]}" if len(k) > 12 else k, **r}

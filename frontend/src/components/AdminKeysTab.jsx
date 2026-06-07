@@ -3,6 +3,7 @@ import {
   addKey,
   authCheck,
   clearAdminPassword,
+  fetchProvider,
   fetchStats,
   getAdminPassword,
   removeKey,
@@ -10,6 +11,7 @@ import {
   resetKey,
   setAdminPassword,
   testKeys,
+  updateProvider,
 } from "../admin";
 
 const STATE_COLORS = {
@@ -21,8 +23,8 @@ const STATE_COLORS = {
 
 const STATE_LABELS = {
   active: "Sẵn sàng",
-  rate_limited: "Cooldown phút",
-  quota_exceeded: "Hết quota ngày",
+  rate_limited: "Giới hạn tốc độ",
+  quota_exceeded: "Hết quota",
   invalid: "Key không hợp lệ",
 };
 
@@ -30,295 +32,336 @@ export default function AdminKeysTab() {
   const [authed, setAuthed] = useState(false);
   const [pw, setPw] = useState("");
   const [stats, setStats] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [selectedModel, setSelectedModel] = useState("");
   const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Auto auth nếu sessionStorage còn password
   useEffect(() => {
     const stored = getAdminPassword();
-    if (stored) {
-      authCheck()
-        .then(() => setAuthed(true))
-        .catch(() => clearAdminPassword());
-    }
+    if (!stored) return;
+    authCheck()
+      .then(() => setAuthed(true))
+      .catch(() => clearAdminPassword());
   }, []);
 
-  // Refresh stats định kỳ khi đã auth
   useEffect(() => {
     if (!authed) return;
-    const load = () =>
-      fetchStats()
-        .then(setStats)
-        .catch((e) => {
-          if (e.response?.status === 401) {
-            clearAdminPassword();
-            setAuthed(false);
-          } else {
-            setErr(e.response?.data?.detail || e.message);
-          }
-        });
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+
+    const handleError = (error) => {
+      if (error.response?.status === 401) {
+        clearAdminPassword();
+        setAuthed(false);
+      } else {
+        setErr(error.response?.data?.detail || error.message);
+      }
+    };
+    const loadStats = () => fetchStats().then(setStats).catch(handleError);
+
+    loadStats();
+    fetchProvider()
+      .then((data) => {
+        setProvider(data);
+        setSelectedModel(data.model);
+      })
+      .catch(handleError);
+
+    const timer = setInterval(loadStats, 5000);
+    return () => clearInterval(timer);
   }, [authed]);
 
-  const handleLogin = async (e) => {
-    e?.preventDefault();
+  const parseBulk = () =>
+    bulkText
+      .split(/[\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
     setErr("");
     setAdminPassword(pw);
     try {
       await authCheck();
       setAuthed(true);
-    } catch (e) {
+    } catch (error) {
       clearAdminPassword();
-      setErr(e.response?.data?.detail || "Sai mật khẩu.");
+      setErr(error.response?.data?.detail || "Sai mật khẩu.");
     }
   };
 
-  const handleLogout = () => {
-    clearAdminPassword();
-    setAuthed(false);
-    setPw("");
-    setStats(null);
+  const handleModelSave = async () => {
+    setSaving(true);
+    setErr("");
+    setNotice("");
+    try {
+      const data = await updateProvider(selectedModel);
+      setProvider(data);
+      setNotice(`Đã chuyển model OCR sang ${data.model}.`);
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const parseBulk = () =>
-    bulkText
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
   const handleTest = async () => {
-    setErr("");
-    setTestResults(null);
     const keys = parseBulk();
     if (!keys.length) {
-      setErr("Hãy paste ít nhất 1 key vào ô bên trên.");
+      setErr("Hãy nhập ít nhất một API key.");
       return;
     }
     setTesting(true);
+    setErr("");
+    setTestResults(null);
     try {
-      const res = await testKeys(keys);
-      setTestResults(res);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setTestResults(await testKeys(keys));
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
     } finally {
       setTesting(false);
     }
   };
 
   const handleSaveAll = async () => {
-    setErr("");
     const keys = parseBulk();
     if (!keys.length) {
-      setErr("Cần ít nhất 1 key.");
+      setErr("Cần ít nhất một API key.");
       return;
     }
-    if (!confirm(`Thay toàn bộ pool bằng ${keys.length} key này? (Pool cũ sẽ bị xoá)`)) return;
+    if (!confirm(`Thay toàn bộ pool bằng ${keys.length} key này?`)) return;
     setSaving(true);
+    setErr("");
     try {
       await replaceKeys(keys);
       setBulkText("");
       setTestResults(null);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setStats(await fetchStats());
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleAdd = async () => {
-    setErr("");
     const keys = parseBulk();
     if (keys.length !== 1) {
-      setErr("Để thêm 1 key, ô textarea chỉ chứa 1 key.");
+      setErr("Để thêm một key, ô nhập chỉ được chứa đúng một key.");
       return;
     }
     setSaving(true);
+    setErr("");
     try {
       await addKey(keys[0]);
       setBulkText("");
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setStats(await fetchStats());
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleRemove = async (index) => {
-    if (!confirm(`Xoá key #${index + 1}?`)) return;
+    if (!confirm(`Xóa key #${index + 1}?`)) return;
     try {
       await removeKey(index);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setStats(await fetchStats());
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
     }
   };
 
-  const handleResetKey = async (index) => {
+  const handleReset = async (index) => {
     try {
       await resetKey(index);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
+      setStats(await fetchStats());
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
     }
   };
 
   if (!authed) {
     return (
-      <form onSubmit={handleLogin} className="max-w-md mx-auto space-y-4">
-        <h2 className="text-lg font-semibold">Mật khẩu Admin</h2>
+      <form onSubmit={handleLogin} className="mx-auto max-w-md space-y-4">
+        <h2 className="text-lg font-semibold">Đăng nhập quản trị</h2>
         <p className="text-sm text-slate-600">
-          Cần mật khẩu để xem/sửa danh sách API keys. Mật khẩu này đặt qua biến môi
-          trường <code className="bg-slate-100 px-1 rounded">ADMIN_PASSWORD</code> trong file <code>.env</code>.
+          Nhập mật khẩu được cấu hình bằng <code>ADMIN_PASSWORD</code> để quản lý
+          kết nối 9router.
         </p>
         <input
           type="password"
           value={pw}
-          onChange={(e) => setPw(e.target.value)}
+          onChange={(event) => setPw(event.target.value)}
           placeholder="Mật khẩu admin"
-          className="w-full border border-slate-300 rounded px-3 py-2"
+          className="w-full rounded border border-slate-300 px-3 py-2"
           autoFocus
         />
-        <button
-          type="submit"
-          className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700"
-        >
+        <button className="w-full rounded bg-indigo-600 py-2 text-white hover:bg-indigo-700">
           Đăng nhập
         </button>
-        {err && <p className="text-red-600 text-sm">{err}</p>}
+        {err && <p className="text-sm text-red-600">{err}</p>}
       </form>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Quản lý Gemini API Keys</h2>
-        <button onClick={handleLogout} className="text-sm text-slate-600 hover:text-slate-900 underline">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Kết nối 9router</h2>
+          <p className="text-sm text-slate-500">
+            API tương thích OpenAI Chat Completions, hỗ trợ đầu vào ảnh.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            clearAdminPassword();
+            setAuthed(false);
+          }}
+          className="text-sm text-slate-600 underline"
+        >
           Đăng xuất
         </button>
       </div>
 
-      {err && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {err}
+      {err && <Message color="red">{err}</Message>}
+      {notice && <Message color="emerald">{notice}</Message>}
+
+      {provider && (
+        <div className="space-y-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+          <div>
+            <div className="text-xs font-semibold uppercase text-cyan-700">HTTP endpoint</div>
+            <code className="text-sm text-cyan-950">{provider.base_url}/chat/completions</code>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="min-w-72 flex-1 text-sm font-medium text-slate-700">
+              Model OCR
+              <select
+                value={selectedModel}
+                onChange={(event) => setSelectedModel(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2"
+              >
+                {provider.models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.id})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              onClick={handleModelSave}
+              disabled={saving || selectedModel === provider.model}
+              className="rounded bg-cyan-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+            >
+              Lưu model
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Stats summary */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Stat label="Tổng key" value={stats.total} />
           <Stat label="Sẵn sàng" value={stats.active} color="text-emerald-700" />
-          <Stat label="Cooldown phút" value={stats.rate_limited} color="text-amber-700" />
-          <Stat label="Hết quota ngày" value={stats.quota_exceeded} color="text-orange-700" />
-          <Stat label="Key chết" value={stats.invalid} color="text-red-700" />
+          <Stat label="Rate limit" value={stats.rate_limited} color="text-amber-700" />
+          <Stat label="Hết quota" value={stats.quota_exceeded} color="text-orange-700" />
+          <Stat label="Không hợp lệ" value={stats.invalid} color="text-red-700" />
         </div>
       )}
 
-      {/* Bulk paste */}
-      <div className="bg-white border border-slate-200 rounded p-4 space-y-3">
-        <h3 className="font-semibold text-slate-800">Paste API keys</h3>
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="font-semibold">9router API keys</h3>
         <p className="text-sm text-slate-600">
-          Mỗi key trên 1 dòng, hoặc phân cách bằng dấu phẩy. Hỗ trợ paste nhiều key một lúc.
+          Mỗi key một dòng. Có thể nhập một key từ biến <code>NINEROUTER_API_KEY</code>
+          hoặc quản lý nhiều key tại đây.
         </p>
         <textarea
           value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-          placeholder={"AIzaSy_KEY_1\nAIzaSy_KEY_2\nAIzaSy_KEY_3\n..."}
-          rows={8}
-          className="w-full p-3 border border-slate-300 rounded font-mono text-xs"
+          onChange={(event) => setBulkText(event.target.value)}
+          placeholder={"sk-9router-key-1\nsk-9router-key-2"}
+          rows={6}
+          className="w-full rounded border border-slate-300 p-3 font-mono text-xs"
         />
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleTest}
             disabled={testing}
-            className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 disabled:opacity-50 text-sm"
+            className="rounded bg-slate-800 px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            {testing ? "Đang test..." : "Test keys (không lưu)"}
+            {testing ? "Đang gửi HTTP request..." : "Kiểm tra key"}
           </button>
           <button
             onClick={handleSaveAll}
             disabled={saving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm"
+            className="rounded bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            {saving ? "Đang lưu..." : "Thay toàn bộ pool"}
+            Thay toàn bộ pool
           </button>
           <button
             onClick={handleAdd}
             disabled={saving}
-            className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 text-sm"
+            className="rounded bg-emerald-600 px-4 py-2 text-sm text-white disabled:opacity-50"
           >
-            Thêm 1 key vào pool
+            Thêm một key
           </button>
         </div>
-
         {testResults && (
-          <div className="mt-3 space-y-1 text-sm">
-            <p>
-              Kết quả test: <strong>{testResults.ok}/{testResults.total}</strong> key hoạt động.
-            </p>
-            <ul className="bg-slate-50 border border-slate-200 rounded p-2 max-h-48 overflow-auto text-xs space-y-1">
-              {testResults.results.map((r, i) => (
-                <li key={i} className={r.ok ? "text-emerald-700" : "text-red-700"}>
-                  {r.ok ? "✓" : "✗"} <span className="font-mono">{r.preview}</span> — {r.message}
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-2 text-sm">
+            <strong>{testResults.ok}/{testResults.total} key hoạt động</strong>
+            {testResults.results.map((result, index) => (
+              <div
+                key={index}
+                className={result.ok ? "text-emerald-700" : "text-red-700"}
+              >
+                <code>{result.preview}</code>: {result.message}
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* Bảng pool */}
-      {stats && stats.keys.length > 0 && (
+      {stats?.keys?.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border border-slate-200 rounded bg-white">
+          <table className="min-w-full rounded border border-slate-200 bg-white text-sm">
             <thead className="bg-slate-100">
               <tr>
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Key</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
-                <th className="px-3 py-2 text-right">Dùng</th>
-                <th className="px-3 py-2 text-right">OK</th>
-                <th className="px-3 py-2 text-right">Lỗi</th>
-                <th className="px-3 py-2 text-right">CD (s)</th>
-                <th className="px-3 py-2 text-center">Hành động</th>
+                {["#", "Key", "Trạng thái", "Dùng", "OK", "Lỗi", "Cooldown", "Hành động"].map(
+                  (label) => (
+                    <th key={label} className="px-3 py-2 text-left">{label}</th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
-              {stats.keys.map((k) => (
-                <tr key={k.index} className="border-t border-slate-200">
-                  <td className="px-3 py-2">{k.index + 1}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{k.preview}</td>
+              {stats.keys.map((key) => (
+                <tr key={key.index} className="border-t border-slate-200">
+                  <td className="px-3 py-2">{key.index + 1}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{key.preview}</td>
                   <td className="px-3 py-2">
                     <span
-                      className={`px-2 py-0.5 text-xs rounded border ${STATE_COLORS[k.state]}`}
-                      title={k.last_error}
+                      className={`rounded border px-2 py-0.5 text-xs ${STATE_COLORS[key.state]}`}
+                      title={key.last_error}
                     >
-                      {STATE_LABELS[k.state]}
+                      {STATE_LABELS[key.state]}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right">{k.used}</td>
-                  <td className="px-3 py-2 text-right text-emerald-700">{k.success}</td>
-                  <td className="px-3 py-2 text-right text-red-700">{k.errors}</td>
-                  <td className="px-3 py-2 text-right">
-                    {k.cooldown_remaining > 0 ? k.cooldown_remaining.toFixed(0) : "—"}
+                  <td className="px-3 py-2">{key.used}</td>
+                  <td className="px-3 py-2 text-emerald-700">{key.success}</td>
+                  <td className="px-3 py-2 text-red-700">{key.errors}</td>
+                  <td className="px-3 py-2">
+                    {key.cooldown_remaining > 0 ? `${key.cooldown_remaining.toFixed(0)}s` : "-"}
                   </td>
-                  <td className="px-3 py-2 text-center space-x-2">
-                    <button
-                      onClick={() => handleResetKey(k.index)}
-                      className="text-xs text-indigo-600 hover:underline"
-                      title="Đưa về trạng thái active"
-                    >
+                  <td className="space-x-2 px-3 py-2">
+                    <button onClick={() => handleReset(key.index)} className="text-indigo-600">
                       Reset
                     </button>
-                    <button
-                      onClick={() => handleRemove(k.index)}
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      Xoá
+                    <button onClick={() => handleRemove(key.index)} className="text-red-600">
+                      Xóa
                     </button>
                   </td>
                 </tr>
@@ -326,23 +369,31 @@ export default function AdminKeysTab() {
             </tbody>
           </table>
         </div>
+      ) : (
+        <Message color="amber">Pool đang trống. Hãy thêm API key để OCR hoạt động.</Message>
       )}
 
-      {stats && stats.keys.length === 0 && (
-        <p className="text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded text-sm">
-          Pool trống — paste keys vào ô trên và bấm "Thay toàn bộ pool" để bắt đầu.
-        </p>
-      )}
-
-      <p className="text-xs text-slate-500">Stats refresh mỗi 5 giây. Keys lưu vào /app/data/keys.json (mount volume).</p>
+      <p className="text-xs text-slate-500">
+        Keys lưu tại <code>/app/data/keys.json</code>; model lưu tại{" "}
+        <code>/app/data/provider.json</code>.
+      </p>
     </div>
   );
 }
 
+function Message({ color, children }) {
+  const styles = {
+    red: "border-red-200 bg-red-50 text-red-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+  return <div className={`rounded border p-3 text-sm ${styles[color]}`}>{children}</div>;
+}
+
 function Stat({ label, value, color = "text-slate-900" }) {
   return (
-    <div className="bg-white border border-slate-200 rounded p-3">
-      <div className="text-xs text-slate-500 uppercase">{label}</div>
+    <div className="rounded border border-slate-200 bg-white p-3">
+      <div className="text-xs uppercase text-slate-500">{label}</div>
       <div className={`text-2xl font-bold ${color}`}>{value}</div>
     </div>
   );

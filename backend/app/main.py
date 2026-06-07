@@ -1,4 +1,4 @@
-"""FastAPI entry cho web app chuyen doi tai lieu voi Gemini API pool."""
+"""FastAPI entry cho web app chuyển đổi tài liệu với 9router."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import admin, convert, ocr
-from app.services.gemini_pool import GeminiKeyPool, init_pool
+from app.services.api_key_pool import ApiKeyPool, get_pool, init_pool
+from app.services.ninerouter_client import provider_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,13 +21,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    keys_from_file = GeminiKeyPool.load_keys_from_file(settings.KEYS_FILE)
-    keys = keys_from_file or settings.gemini_keys_list
+    keys_from_file = ApiKeyPool.load_keys_from_file(settings.KEYS_FILE)
+    keys = keys_from_file or settings.ninerouter_keys_list
     source = "file" if keys_from_file else ("env" if keys else "none")
 
     init_pool(
         keys,
-        max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY,
+        max_concurrent_per_key=settings.NINEROUTER_MAX_CONCURRENT_PER_KEY,
         persist_path=settings.KEYS_FILE,
     )
     if keys:
@@ -34,7 +35,7 @@ async def lifespan(app: FastAPI):
             "Pool san sang: %d key tu %s (model=%s).",
             len(keys),
             source,
-            settings.GEMINI_MODEL,
+            provider_config.model,
         )
     else:
         logger.warning("Pool rong - vao /admin tren web de them key.")
@@ -69,7 +70,9 @@ def health() -> dict:
         "status": "ok",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "gemini_keys": len(settings.gemini_keys_list),
+        "provider": "9router",
+        "model": provider_config.model,
+        "api_keys": get_pool().stats()["total"],
     }
 
 

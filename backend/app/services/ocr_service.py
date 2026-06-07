@@ -1,4 +1,4 @@
-"""OCR tai lieu/anh bang Gemini, ho tro xuat LaTeX hoac noi dung cho Word."""
+"""OCR tài liệu/ảnh qua 9router, hỗ trợ xuất LaTeX hoặc nội dung Word."""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +10,8 @@ from typing import Optional
 from PIL import Image
 
 from app.config import settings
-from app.services.gemini_pool import ApiKey, GeminiKeyPool, get_pool
+from app.services.api_key_pool import ApiKey, ApiKeyPool, get_pool
+from app.services.ninerouter_client import create_vision_completion
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,13 @@ QUY TAC:
 CHI TRA VE NOI DUNG MARKDOWN."""
 
 
-class GeminiOCRService:
-    """OCR service dung Gemini API qua key pool."""
+class OCRService:
+    """OCR service dùng 9router qua API key pool."""
 
-    def __init__(self, pool: Optional[GeminiKeyPool] = None) -> None:
+    def __init__(self, pool: Optional[ApiKeyPool] = None) -> None:
         self._pool = pool
 
-    def _get_pool(self) -> GeminiKeyPool:
+    def _get_pool(self) -> ApiKeyPool:
         return self._pool or get_pool()
 
     @staticmethod
@@ -150,28 +151,20 @@ class GeminiOCRService:
             )
         return formulas
 
-    async def _call_gemini(
+    async def _call_provider(
         self,
         key: ApiKey,
         image_bytes: bytes,
         prompt: str,
         mime_type: str = "image/png",
     ) -> str:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=key.key)
-        response = await asyncio.wait_for(
-            client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=[
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                    prompt,
-                ],
-            ),
-            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+        response = await create_vision_completion(
+            api_key=key.key,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            prompt=prompt,
         )
-        return self._strip_markdown_fence(response.text or "")
+        return self._strip_markdown_fence(response)
 
     async def _ocr_with_retry(
         self,
@@ -182,11 +175,11 @@ class GeminiOCRService:
         pool = self._get_pool()
         last_exc: Optional[Exception] = None
 
-        for attempt in range(settings.GEMINI_RETRY_ATTEMPTS):
+        for attempt in range(settings.NINEROUTER_RETRY_ATTEMPTS):
             key = await pool.acquire()
             try:
                 async with key.semaphore:
-                    result = await self._call_gemini(key, image_bytes, prompt, mime_type)
+                    result = await self._call_provider(key, image_bytes, prompt, mime_type)
                 await pool.report_success(key)
                 logger.info("OCR thanh cong (attempt %d, key=%s)", attempt + 1, key.preview)
                 return result
@@ -201,7 +194,7 @@ class GeminiOCRService:
                 )
 
         raise RuntimeError(
-            f"OCR that bai sau {settings.GEMINI_RETRY_ATTEMPTS} lan thu. Loi cuoi: {last_exc}"
+            f"OCR thất bại sau {settings.NINEROUTER_RETRY_ATTEMPTS} lần thử. Lỗi cuối: {last_exc}"
         )
 
     async def image_to_latex(self, image_bytes: bytes, mode: str = "single") -> str:
@@ -306,4 +299,4 @@ class GeminiOCRService:
         return content
 
 
-ocr_service = GeminiOCRService()
+ocr_service = OCRService()

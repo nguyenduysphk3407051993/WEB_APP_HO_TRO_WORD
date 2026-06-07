@@ -52,7 +52,7 @@ export default function App() {
       </main>
 
       <footer className="py-4 text-center text-xs text-slate-500">
-        FastAPI + Gemini Pool | React + Tailwind | Traefik
+        FastAPI + 9router HTTP API | React + Tailwind | Traefik
       </footer>
     </div>
   );

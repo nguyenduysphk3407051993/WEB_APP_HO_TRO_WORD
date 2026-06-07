@@ -140,7 +140,7 @@ export default function OcrTab() {
               className="w-20 rounded border border-slate-300 px-2 py-1"
             />
             <span className="text-slate-500">
-              Tang toc OCR PDF khi co nhieu key Gemini trong pool.
+              Tăng tốc OCR PDF khi có nhiều key 9router trong pool.
             </span>
           </div>
         )}
@@ -165,7 +165,7 @@ export default function OcrTab() {
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
           {outputTarget === "word"
             ? "Dang OCR, tao Word va sinh MathML..."
-            : "Dang goi Gemini API..."}
+            : "Đang gửi ảnh tới 9router..."}
         </div>
       )}
 

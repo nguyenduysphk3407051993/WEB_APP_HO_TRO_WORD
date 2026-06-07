@@ -18,6 +18,9 @@ adminApi.interceptors.request.use((cfg) => {
 
 export const authCheck = () => adminApi.get("/auth-check").then((r) => r.data);
 export const fetchStats = () => adminApi.get("/keys/stats").then((r) => r.data);
+export const fetchProvider = () => adminApi.get("/provider").then((r) => r.data);
+export const updateProvider = (model) =>
+  adminApi.put("/provider", { model }).then((r) => r.data);
 export const replaceKeys = (keys) => adminApi.post("/keys", { keys }).then((r) => r.data);
 export const addKey = (key) => adminApi.post("/keys/add", { key }).then((r) => r.data);
 export const removeKey = (index) => adminApi.delete(`/keys/${index}`).then((r) => r.data);
