@@ -126,7 +126,15 @@ async def create_vision_completion(
     if response.is_error:
         detail = response.text[:500]
         raise RuntimeError(f"9router HTTP {response.status_code}: {detail}")
-    return _extract_text(response.json()).strip()
+    try:
+        data = response.json()
+    except json.JSONDecodeError as exc:
+        preview = response.text[:500].strip()
+        raise RuntimeError(
+            f"Không thể giải mã JSON từ 9router (HTTP {response.status_code}). "
+            f"Phản hồi: {preview or '<rỗng>'}"
+        ) from exc
+    return _extract_text(data).strip()
 
 
 async def test_single_key(key: str, model: str | None = None) -> dict:
@@ -153,7 +161,15 @@ async def test_single_key(key: str, model: str | None = None) -> dict:
                 "ok": False,
                 "message": f"HTTP {response.status_code}: {response.text[:160]}",
             }
-        text = _extract_text(response.json()).strip()
+        try:
+            data = response.json()
+        except json.JSONDecodeError as exc:
+            preview = response.text[:160].strip()
+            return {
+                "ok": False,
+                "message": f"Không thể giải mã JSON từ 9router (HTTP {response.status_code}). Phản hồi: {preview or '<rỗng>'}",
+            }
+        text = _extract_text(data).strip()
         return {"ok": True, "message": f"9router phản hồi: {text[:50]}"}
     except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         return {"ok": False, "message": str(exc)[:200]}

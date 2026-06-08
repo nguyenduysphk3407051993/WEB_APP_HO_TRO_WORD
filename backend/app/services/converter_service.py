@@ -9,9 +9,10 @@ from pathlib import Path
 
 import pypandoc
 from docx import Document
-from docx.enum.text import WD_TAB_ALIGNMENT, WD_TAB_LEADER
+from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml.ns import qn
-from docx.shared import Cm, RGBColor
+from docx.shared import Cm, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
 logger = logging.getLogger(__name__)
@@ -79,8 +80,19 @@ _UNICODE_TEX_REPLACEMENTS = {
     "−": "-",
 }
 _QUESTION_PREFIX_COLOR = RGBColor(0x00, 0x70, 0xC0)
-_OPTION_MARKER_INDENT = Cm(0.75)
-_OPTION_TAB_STOP = Cm(1.35)
+_DOCUMENT_FONT_NAME = "Times New Roman"
+_DOCUMENT_BODY_FONT_SIZE = 12
+_DOCUMENT_PAGE_WIDTH = Cm(21.59)
+_DOCUMENT_PAGE_HEIGHT = Cm(27.94)
+_DOCUMENT_LEFT_MARGIN = Cm(2.0)
+_DOCUMENT_RIGHT_MARGIN = Cm(1.25)
+_DOCUMENT_TOP_MARGIN = Cm(1.5)
+_DOCUMENT_BOTTOM_MARGIN = Cm(1.0)
+_OPTION_LEFT_INDENT = Cm(1.75)
+_OPTION_TWO_COLUMN_TABS = (Cm(1.75), Cm(10.0))
+_OPTION_FOUR_COLUMN_TABS = (Cm(1.75), Cm(6.0), Cm(10.0), Cm(14.0))
+_OPTION_FOUR_COLUMN_MAX_LENGTH = 20
+_OPTION_FOUR_COLUMN_TOTAL_LENGTH = 60
 _SUBITEM_MARKER_INDENT = Cm(1.0)
 _SUBITEM_TAB_STOP = Cm(1.65)
 
@@ -90,7 +102,7 @@ class ConverterService:
 
     def latex_to_mathml(self, latex: str, display: bool = True) -> str:
         """Tra ve chuoi MathML (<math>) de dan vao MathType."""
-        wrapper = f"$$\n{latex}\n$$" if display else f"${latex}$"
+        wrapper = f"\\[\n{latex}\n\\]" if display else f"${latex}$"
         html = pypandoc.convert_text(
             wrapper,
             "html",
@@ -185,13 +197,13 @@ class ConverterService:
 
     @staticmethod
     def _normalize_toggle_tex_markdown(markdown_content: str) -> str:
-        """Dua delimiter ve $...$/$$...$$ va lam sach TeX cho MathType Toggle TeX."""
+        """Dua delimiter ve $...$/\\[...\\] va lam sach TeX cho MathType Toggle TeX."""
         markdown_content = _DOLLAR_BLOCK_RE.sub(
-            lambda match: f"$$\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n$$",
+            lambda match: f"\\[\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n\\]",
             markdown_content,
         )
         markdown_content = _DISPLAY_BRACKET_RE.sub(
-            lambda match: f"$$\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n$$",
+            lambda match: f"\\[\n{ConverterService.sanitize_toggle_tex_latex(match.group(1))}\n\\]",
             markdown_content,
         )
         markdown_content = _INLINE_PAREN_RE.sub(
@@ -222,6 +234,8 @@ class ConverterService:
     def postprocess_ocr_docx(self, docx_path: Path) -> Path:
         """Hau xu ly DOCX OCR de dinh dang cau hoi, phuong an va y nho on dinh hon."""
         document = Document(docx_path)
+        self._apply_document_geometry(document)
+        self._apply_document_font(document)
         original_paragraphs = list(document.paragraphs)
 
         for paragraph in original_paragraphs:
@@ -243,8 +257,142 @@ class ConverterService:
             self._set_paragraph_text(current, segments[0][1])
             self._apply_segment_format(current, segments[0][0])
 
+        self._layout_answer_choices(document)
         document.save(docx_path)
         return docx_path
+
+    @staticmethod
+    def _apply_document_geometry(document: Document) -> None:
+        """Ap dung kich thuoc trang va le theo tai lieu de cuong mau."""
+        for section in document.sections:
+            section.page_width = _DOCUMENT_PAGE_WIDTH
+            section.page_height = _DOCUMENT_PAGE_HEIGHT
+            section.left_margin = _DOCUMENT_LEFT_MARGIN
+            section.right_margin = _DOCUMENT_RIGHT_MARGIN
+            section.top_margin = _DOCUMENT_TOP_MARGIN
+            section.bottom_margin = _DOCUMENT_BOTTOM_MARGIN
+
+    def _apply_document_font(self, document: Document) -> None:
+        """Dung Times New Roman cho toan tai lieu, giu cap co chu cua heading."""
+        for style in document.styles:
+            if style.type != WD_STYLE_TYPE.PARAGRAPH:
+                continue
+            self._set_font_family(style.font, style.element.get_or_add_rPr())
+
+        normal_style = document.styles["Normal"]
+        normal_style.font.size = Pt(_DOCUMENT_BODY_FONT_SIZE)
+
+        for paragraph in self._iter_document_paragraphs(document):
+            for run in paragraph.runs:
+                self._set_run_font(run, size=None)
+
+    @staticmethod
+    def _iter_document_paragraphs(parent):
+        for paragraph in parent.paragraphs:
+            yield paragraph
+        for table in parent.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    yield from ConverterService._iter_document_paragraphs(cell)
+
+    def _layout_answer_choices(self, document: Document) -> None:
+        """Gom A-D thanh hang 2/4 cot voi tab stop theo tai lieu mau."""
+        paragraphs = list(document.paragraphs)
+        index = 0
+
+        while index < len(paragraphs):
+            first = self._parse_choice(paragraphs[index].text)
+            if not first or first[0] != "A":
+                index += 1
+                continue
+
+            group: list[tuple[Paragraph, str, str]] = []
+            expected_markers = ("A", "B", "C", "D")
+            for offset, expected in enumerate(expected_markers):
+                if index + offset >= len(paragraphs):
+                    break
+                parsed = self._parse_choice(paragraphs[index + offset].text)
+                if not parsed or parsed[0] != expected:
+                    break
+                group.append((paragraphs[index + offset], parsed[0], parsed[1]))
+
+            if len(group) != 4:
+                index += 1
+                continue
+
+            choices = [(marker, content) for _, marker, content in group]
+            first_element = group[0][0]._p
+            if self._use_four_choice_columns(choices):
+                self._set_choice_row(group[0][0], choices, _OPTION_FOUR_COLUMN_TABS)
+                for paragraph, _, _ in group[1:]:
+                    self._remove_paragraph(paragraph)
+            else:
+                self._set_choice_row(
+                    group[0][0], choices[:2], _OPTION_TWO_COLUMN_TABS
+                )
+                self._set_choice_row(
+                    group[2][0], choices[2:], _OPTION_TWO_COLUMN_TABS
+                )
+                self._remove_paragraph(group[1][0])
+                self._remove_paragraph(group[3][0])
+
+            paragraphs = list(document.paragraphs)
+            index = next(
+                (
+                    paragraph_index
+                    for paragraph_index, paragraph in enumerate(paragraphs)
+                    if paragraph._p is first_element
+                ),
+                index,
+            ) + 1
+
+    @staticmethod
+    def _parse_choice(text: str) -> tuple[str, str] | None:
+        match = _OPTION_PREFIX_RE.match(text.strip())
+        if not match:
+            return None
+        return match.group(1), match.group(3).strip()
+
+    @staticmethod
+    def _use_four_choice_columns(choices: list[tuple[str, str]]) -> bool:
+        lengths = [len(content) for _, content in choices]
+        return (
+            max(lengths, default=0) <= _OPTION_FOUR_COLUMN_MAX_LENGTH
+            and sum(lengths) <= _OPTION_FOUR_COLUMN_TOTAL_LENGTH
+        )
+
+    def _set_choice_row(
+        self,
+        paragraph: Paragraph,
+        choices: list[tuple[str, str]],
+        tab_positions: tuple,
+    ) -> None:
+        self._clear_paragraph(paragraph)
+        paragraph.style = "Normal"
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        fmt = paragraph.paragraph_format
+        fmt.left_indent = _OPTION_LEFT_INDENT
+        fmt.first_line_indent = Pt(0)
+        fmt.space_before = Pt(3)
+        fmt.space_after = Pt(3)
+        fmt.line_spacing = 1
+        self._reset_tab_stops(paragraph)
+        for position in tab_positions:
+            fmt.tab_stops.add_tab_stop(
+                position,
+                WD_TAB_ALIGNMENT.LEFT,
+                WD_TAB_LEADER.SPACES,
+            )
+
+        for choice_index, (marker, content) in enumerate(choices):
+            if choice_index:
+                tab_run = paragraph.add_run("\t")
+                self._set_run_font(tab_run)
+            marker_run = paragraph.add_run(f"{marker}. ")
+            self._set_run_font(marker_run, bold=True)
+            content_run = paragraph.add_run(content)
+            self._set_run_font(content_run, bold=False)
 
     @staticmethod
     def _explode_structured_paragraph(text: str) -> list[tuple[str, str]]:
@@ -329,21 +477,50 @@ class ConverterService:
         content = match.group(len(match.groups())).strip()
         self._clear_paragraph(paragraph)
 
-        paragraph.add_run(marker)
-        paragraph.add_run("\t")
-        paragraph.add_run(content)
+        marker_run = paragraph.add_run(f"{marker} ")
+        content_separator = paragraph.add_run("\t") if is_subitem else None
+        content_run = paragraph.add_run(content)
 
         fmt = paragraph.paragraph_format
-        marker_indent = _SUBITEM_MARKER_INDENT if is_subitem else _OPTION_MARKER_INDENT
-        tab_stop = _SUBITEM_TAB_STOP if is_subitem else _OPTION_TAB_STOP
+        marker_indent = _SUBITEM_MARKER_INDENT if is_subitem else _OPTION_LEFT_INDENT
+        tab_stop = _SUBITEM_TAB_STOP if is_subitem else _OPTION_LEFT_INDENT
         fmt.left_indent = tab_stop
         fmt.first_line_indent = marker_indent - tab_stop
+        fmt.space_before = Pt(3)
+        fmt.space_after = Pt(3)
+        fmt.line_spacing = 1
         self._reset_tab_stops(paragraph)
         fmt.tab_stops.add_tab_stop(
             tab_stop,
             WD_TAB_ALIGNMENT.LEFT,
             WD_TAB_LEADER.SPACES,
         )
+        self._set_run_font(marker_run, bold=not is_subitem)
+        if content_separator is not None:
+            self._set_run_font(content_separator)
+        self._set_run_font(content_run, bold=False)
+
+    @staticmethod
+    def _set_font_family(font, r_pr) -> None:
+        font.name = _DOCUMENT_FONT_NAME
+        r_fonts = r_pr.get_or_add_rFonts()
+        for name in ("ascii", "hAnsi", "eastAsia", "cs"):
+            r_fonts.set(qn(f"w:{name}"), _DOCUMENT_FONT_NAME)
+
+    @classmethod
+    def _set_run_font(
+        cls,
+        run,
+        *,
+        size: int | None = _DOCUMENT_BODY_FONT_SIZE,
+        bold: bool | None = None,
+    ) -> None:
+        r_pr = run._element.get_or_add_rPr()
+        cls._set_font_family(run.font, r_pr)
+        if size is not None:
+            run.font.size = Pt(size)
+        if bold is not None:
+            run.bold = bold
 
     @staticmethod
     def _set_paragraph_text(paragraph: Paragraph, text: str) -> None:
@@ -376,6 +553,12 @@ class ConverterService:
         if text:
             new_paragraph.add_run(text)
         return new_paragraph
+
+    @staticmethod
+    def _remove_paragraph(paragraph: Paragraph) -> None:
+        element = paragraph._element
+        element.getparent().remove(element)
+        paragraph._p = paragraph._element = None
 
     def docx_to_latex(self, docx_path: Path) -> str:
         """File .docx (chua OMML/Equation) -> LaTeX."""

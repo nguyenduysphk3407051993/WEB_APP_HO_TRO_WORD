@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 PROMPT_SINGLE_FORMULA = """Ban la chuyen gia OCR cong thuc toan hoc. Hay trich xuat toan bo noi dung trong anh thanh ma LaTeX chuan.
 
 QUY TAC:
-1. Neu anh chi chua 1 cong thuc: tra ve CHI ma LaTeX cua cong thuc, khong co dau $ bao quanh, khong giai thich.
-2. Neu anh co nhieu cong thuc/van ban: giu nguyen thu tu, dung $...$ cho inline math, $$...$$ cho display math.
+1. Neu anh chi chua 1 cong thuc: tra ve cong thuc display trong cap \\[...\\], khong giai thich.
+2. Neu anh co nhieu cong thuc/van ban: giu nguyen thu tu, dung $...$ cho inline math, \\[...\\] cho display math.
 3. Tieng Viet giu nguyen dau, khong dich.
 4. Dung cac lenh LaTeX chuan nhu \\frac, \\sqrt, \\int, \\sum, \\lim, \\sin, \\cos, \\log, \\ln.
 5. Khong them markdown code fence.
@@ -31,7 +31,7 @@ PROMPT_FULL_PAGE = """Ban la chuyen gia OCR tai lieu khoa hoc. Hay trich xuat to
 
 QUY TAC:
 1. Giu nguyen cau truc tai lieu: tieu de, doan van, danh sach, bang bieu neu co.
-2. Cong thuc inline dung $...$, cong thuc display dung $$...$$ hoac \\[...\\].
+2. Cong thuc inline dung $...$, cong thuc display bat buoc dung \\[...\\].
 3. Tieng Viet giu nguyen dau, khong dich.
 4. Khong them \\documentclass, \\begin{document}, \\end{document}.
 5. Khong them markdown code fence.
@@ -43,13 +43,13 @@ PROMPT_WORD_SINGLE = """Ban la chuyen gia OCR tai lieu de chuyen sang Microsoft 
 
 QUY TAC:
 1. Van ban thuong giu dang doan van Markdown.
-2. Cong thuc inline dung $...$, cong thuc rieng dong dung $$...$$.
-3. Neu anh chi co 1 cong thuc, chi tra ve $$...$$.
+2. Cong thuc inline dung $...$, cong thuc rieng dong bat buoc dung \\[...\\].
+3. Neu anh chi co 1 cong thuc, chi tra ve \\[...\\].
 4. Tieu de dung #, ## khi thuc su co tieu de.
 5. Danh sach dung - hoac 1.
 6. Bang ro rang thi dung bang Markdown.
 7. Tieng Viet giu nguyen dau, khong dich.
-8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
+8. Khong dua chu tieng Viet vao trong $...$ hoac \\[...\\]. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
 9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
 10. Khong them code fence, khong giai thich, khong chen nhan xet.
 11. Neu la cau trac nghiem co phuong an A., B., C., D. thi dat moi phuong an tren mot dong rieng.
@@ -65,9 +65,9 @@ QUY TAC:
 3. Doan van viet bang Markdown thuong.
 4. Danh sach dung - hoac 1.
 5. Bang ro rang thi dung bang Markdown.
-6. Cong thuc inline dung $...$, cong thuc rieng dong dung $$...$$.
+6. Cong thuc inline dung $...$, cong thuc rieng dong bat buoc dung \\[...\\].
 7. Tieng Viet giu nguyen dau, khong dich.
-8. Khong dua chu tieng Viet vao trong $...$ hoac $$...$$. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
+8. Khong dua chu tieng Viet vao trong $...$ hoac \\[...\\]. Neu co chu giai thich tieng Viet gan cong thuc, tach ra ngoai cong thuc thanh van ban thuong.
 9. Neu bat buoc phai co chu trong cong thuc, dung ASCII khong dau trong \\text{...} de MathType Toggle TeX khong loi.
 10. Khong them code fence, khong them loi mo dau/ket luan, khong giai thich.
 11. Neu la cau trac nghiem co phuong an A., B., C., D. thi dat moi phuong an tren mot dong rieng.
@@ -95,6 +95,33 @@ class OCRService:
                 if lines and lines[-1].strip().startswith("```"):
                     lines = lines[:-1]
                 text = "\n".join(lines).strip()
+        return text
+
+    @staticmethod
+    def _normalize_display_delimiters(text: str, *, wrap_bare: bool = False) -> str:
+        """Chuan hoa display math ve duy nhat cap \\[...\\]."""
+        text = re.sub(
+            r"\$\$(.+?)\$\$",
+            lambda match: f"\\[\n{match.group(1).strip()}\n\\]",
+            text.strip(),
+            flags=re.DOTALL,
+        )
+        if wrap_bare and text:
+            bracket_match = re.fullmatch(r"\\\[(.+?)\\\]", text, re.DOTALL)
+            if bracket_match:
+                body = bracket_match.group(1).strip()
+            else:
+                inline_match = re.fullmatch(
+                    r"(?:\\\((.+?)\\\)|(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$))",
+                    text,
+                    re.DOTALL,
+                )
+                body = (
+                    inline_match.group(1) or inline_match.group(2)
+                    if inline_match
+                    else text
+                ).strip()
+            return f"\\[\n{body}\n\\]"
         return text
 
     @staticmethod
@@ -199,11 +226,17 @@ class OCRService:
 
     async def image_to_latex(self, image_bytes: bytes, mode: str = "single") -> str:
         prompt = self._select_latex_prompt(mode)
-        return await self._ocr_with_retry(self._normalize_image(image_bytes), prompt, "image/png")
+        result = await self._ocr_with_retry(
+            self._normalize_image(image_bytes), prompt, "image/png"
+        )
+        return self._normalize_display_delimiters(result, wrap_bare=mode == "single")
 
     async def image_to_markdown(self, image_bytes: bytes, mode: str = "page") -> str:
         prompt = self._select_markdown_prompt(mode)
-        return await self._ocr_with_retry(self._normalize_image(image_bytes), prompt, "image/png")
+        result = await self._ocr_with_retry(
+            self._normalize_image(image_bytes), prompt, "image/png"
+        )
+        return self._normalize_display_delimiters(result, wrap_bare=mode == "single")
 
     async def pdf_to_latex(
         self,
@@ -268,6 +301,7 @@ class OCRService:
                 async with sem:
                     try:
                         text = await self._ocr_with_retry(img_bytes, prompt, "image/png")
+                        text = self._normalize_display_delimiters(text)
                         return {"page": page_num, field_name: text, "error": None}
                     except Exception as exc:
                         logger.exception("Loi OCR trang %d", page_num)
