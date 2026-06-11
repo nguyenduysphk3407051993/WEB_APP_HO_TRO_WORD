@@ -12,8 +12,8 @@ from app.config import settings
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 GEMINI_MODELS = [
-    {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"},
-    {"id": "gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite"},
+    {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash"},
+    {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite"},
     {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
     {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
 ]
@@ -67,7 +67,7 @@ async def create_vision_completion(
 
 
 async def test_single_key(key: str, model: str | None = None) -> dict:
-    model = model or "gemini-2.0-flash"
+    model = model or "gemini-3.5-flash"
     url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={key.strip()}"
     payload = {
         "contents": [{"parts": [{"text": "Reply with only the word: OK"}]}],
