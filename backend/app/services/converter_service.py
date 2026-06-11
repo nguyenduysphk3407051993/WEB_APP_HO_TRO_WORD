@@ -88,11 +88,12 @@ _DOCUMENT_LEFT_MARGIN = Cm(2.0)
 _DOCUMENT_RIGHT_MARGIN = Cm(1.25)
 _DOCUMENT_TOP_MARGIN = Cm(1.5)
 _DOCUMENT_BOTTOM_MARGIN = Cm(1.0)
-_OPTION_LEFT_INDENT = Cm(1.75)
-_OPTION_TWO_COLUMN_TABS = (Cm(1.75), Cm(10.0))
-_OPTION_FOUR_COLUMN_TABS = (Cm(1.75), Cm(6.0), Cm(10.0), Cm(14.0))
+_OPTION_LEFT_INDENT = Cm(0.5)
+_OPTION_TWO_COLUMN_TABS = (Cm(0.5), Cm(9.0))
+_OPTION_FOUR_COLUMN_TABS = (Cm(0.5), Cm(4.5), Cm(9.0), Cm(13.0))
 _OPTION_FOUR_COLUMN_MAX_LENGTH = 20
-_OPTION_FOUR_COLUMN_TOTAL_LENGTH = 60
+_OPTION_FOUR_COLUMN_TOTAL_LENGTH = 80
+_OPTION_TWO_COLUMN_MAX_LENGTH = 40
 _SUBITEM_MARKER_INDENT = Cm(1.0)
 _SUBITEM_TAB_STOP = Cm(1.65)
 
@@ -326,7 +327,7 @@ class ConverterService:
                 self._set_choice_row(group[0][0], choices, _OPTION_FOUR_COLUMN_TABS)
                 for paragraph, _, _ in group[1:]:
                     self._remove_paragraph(paragraph)
-            else:
+            elif self._use_two_choice_columns(choices):
                 self._set_choice_row(
                     group[0][0], choices[:2], _OPTION_TWO_COLUMN_TABS
                 )
@@ -335,6 +336,10 @@ class ConverterService:
                 )
                 self._remove_paragraph(group[1][0])
                 self._remove_paragraph(group[3][0])
+            else:
+                # 1 phương án/dòng: đã được format sẵn bởi _format_choice_paragraph
+                index += 1
+                continue
 
             paragraphs = list(document.paragraphs)
             index = next(
@@ -360,6 +365,11 @@ class ConverterService:
             max(lengths, default=0) <= _OPTION_FOUR_COLUMN_MAX_LENGTH
             and sum(lengths) <= _OPTION_FOUR_COLUMN_TOTAL_LENGTH
         )
+
+    @staticmethod
+    def _use_two_choice_columns(choices: list[tuple[str, str]]) -> bool:
+        lengths = [len(content) for _, content in choices]
+        return max(lengths, default=0) <= _OPTION_TWO_COLUMN_MAX_LENGTH
 
     def _set_choice_row(
         self,
