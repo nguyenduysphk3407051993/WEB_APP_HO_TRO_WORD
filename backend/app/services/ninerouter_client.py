@@ -158,6 +158,7 @@ async def create_vision_completion(
             }
         ],
         "max_tokens": settings.NINEROUTER_MAX_TOKENS,
+        "stream": False,
     }
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
@@ -191,6 +192,7 @@ async def test_single_key(key: str, model: str | None = None) -> dict:
             {"role": "user", "content": "Reply with only the word: OK"}
         ],
         "max_tokens": 16,
+        "stream": False,
     }
     headers = {
         "Authorization": f"Bearer {key.strip()}",
