@@ -94,8 +94,6 @@ _OPTION_FOUR_COLUMN_TABS = (Cm(0.5), Cm(4.5), Cm(9.0), Cm(13.0))
 _OPTION_FOUR_COLUMN_MAX_LENGTH = 20
 _OPTION_FOUR_COLUMN_TOTAL_LENGTH = 80
 _OPTION_TWO_COLUMN_MAX_LENGTH = 40
-_SUBITEM_MARKER_INDENT = Cm(1.0)
-_SUBITEM_TAB_STOP = Cm(1.65)
 
 
 class ConverterService:
@@ -488,26 +486,21 @@ class ConverterService:
         self._clear_paragraph(paragraph)
 
         marker_run = paragraph.add_run(f"{marker} ")
-        content_separator = paragraph.add_run("\t") if is_subitem else None
         content_run = paragraph.add_run(content)
 
         fmt = paragraph.paragraph_format
-        marker_indent = _SUBITEM_MARKER_INDENT if is_subitem else _OPTION_LEFT_INDENT
-        tab_stop = _SUBITEM_TAB_STOP if is_subitem else _OPTION_LEFT_INDENT
-        fmt.left_indent = tab_stop
-        fmt.first_line_indent = marker_indent - tab_stop
+        fmt.left_indent = _OPTION_LEFT_INDENT
+        fmt.first_line_indent = Pt(0)
         fmt.space_before = Pt(3)
         fmt.space_after = Pt(3)
         fmt.line_spacing = 1
         self._reset_tab_stops(paragraph)
         fmt.tab_stops.add_tab_stop(
-            tab_stop,
+            _OPTION_LEFT_INDENT,
             WD_TAB_ALIGNMENT.LEFT,
             WD_TAB_LEADER.SPACES,
         )
         self._set_run_font(marker_run, bold=not is_subitem)
-        if content_separator is not None:
-            self._set_run_font(content_separator)
         self._set_run_font(content_run, bold=False)
 
     @staticmethod
