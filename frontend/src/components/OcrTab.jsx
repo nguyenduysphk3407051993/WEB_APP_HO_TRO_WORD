@@ -4,12 +4,12 @@ import MathPreview from "./MathPreview";
 import CopyButton from "./CopyButton";
 import {
   downloadOcrDocx,
-  ocrImage,
   ocrImageToDocx,
-  ocrImageToText,
-  ocrPdf,
   ocrPdfToDocx,
-  ocrPdfToText,
+  ocrImageToExamLatex,
+  ocrPdfToExamLatex,
+  ocrImageToEquation,
+  ocrPdfToEquation,
 } from "../api";
 
 const saveBlob = (blob, filename) => {
@@ -46,26 +46,29 @@ export default function OcrTab() {
           mode === "image"
             ? await ocrImageToDocx(file, ocrMode)
             : await ocrPdfToDocx(file, { mode: "page", maxConcurrent });
-
         await triggerDownload(payload);
         setResult({ type: "word", data: payload });
         return;
       }
 
-      if (outputTarget === "text") {
+      if (outputTarget === "examlatex") {
         const data =
           mode === "image"
-            ? await ocrImageToText(file, ocrMode)
-            : await ocrPdfToText(file, { mode: "page", maxConcurrent });
-        setResult({ type: "text", data });
+            ? await ocrImageToExamLatex(file, ocrMode)
+            : await ocrPdfToExamLatex(file, { mode: "page", maxConcurrent });
+        setResult({ type: "examlatex", data });
         return;
       }
 
-      const data =
-        mode === "image"
-          ? await ocrImage(file, ocrMode)
-          : await ocrPdf(file, { mode: "page", maxConcurrent });
-      setResult({ type: "latex", data });
+      if (outputTarget === "equation") {
+        const payload =
+          mode === "image"
+            ? await ocrImageToEquation(file, ocrMode)
+            : await ocrPdfToEquation(file, { mode: "page", maxConcurrent });
+        await triggerDownload(payload);
+        setResult({ type: "equation", data: payload });
+        return;
+      }
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
     } finally {
@@ -78,6 +81,27 @@ export default function OcrTab() {
       ? { "image/*": [".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"] }
       : { "application/pdf": [".pdf"] };
 
+  const hints = {
+    word: {
+      image: "Tải ảnh để tạo Word với công thức LaTeX cho MathType Toggle TeX.",
+      pdf: "Tải PDF để OCR sang Word, giữ công thức LaTeX cho Toggle TeX.",
+    },
+    examlatex: {
+      image: "Tải ảnh đề thi để trích xuất thành LaTeX chuẩn \\begin{ex}...\\end{ex}.",
+      pdf: "Tải PDF đề thi — kết quả LaTeX từng trang theo chuẩn exam-latex-creator.",
+    },
+    equation: {
+      image: "Tải ảnh để tạo Word với công thức OMML (equation thực sự, không cần MathType).",
+      pdf: "Tải PDF — tạo Word với công thức OMML hiển thị ngay trong Word.",
+    },
+  };
+
+  const loadingMsg = {
+    word: "Đang OCR, tạo Word và sinh MathML...",
+    examlatex: "Đang OCR, chuyển sang LaTeX thi cử...",
+    equation: "Đang OCR, tạo Word Equation...",
+  };
+
   return (
     <div className="space-y-5">
       {/* Info banner */}
@@ -86,8 +110,9 @@ export default function OcrTab() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <p className="text-sm text-indigo-300">
-          Luồng OCR tạo file Word với công thức ở dạng LaTeX text, sẵn sàng để
-          MathType xử lý hàng loạt bằng Toggle TeX.
+          Chọn <strong>Word + Toggle TeX</strong> để tạo file Word cho MathType ·{" "}
+          <strong>Exam LaTeX</strong> để xuất đề thi dạng <code>\begin&#123;ex&#125;</code> ·{" "}
+          <strong>Equation</strong> để tạo Word với công thức OMML hiển thị ngay.
         </p>
       </div>
 
@@ -129,9 +154,9 @@ export default function OcrTab() {
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span className="font-semibold text-slate-300">Đầu ra:</span>
           {[
-            { id: "word", label: "Word + Toggle TeX" },
-            { id: "text", label: "Text thuần" },
-            { id: "latex", label: "LaTeX" },
+            { id: "word",      label: "Word + Toggle TeX" },
+            { id: "examlatex", label: "Exam LaTeX" },
+            { id: "equation",  label: "Equation" },
           ].map((item) => (
             <button
               key={item.id}
@@ -182,31 +207,13 @@ export default function OcrTab() {
       <Dropzone
         onFile={handleFile}
         accept={accept}
-        hint={
-          mode === "image"
-            ? outputTarget === "word"
-              ? "Tải ảnh để tạo Word với công thức LaTeX cho MathType Toggle TeX."
-              : outputTarget === "text"
-                ? "Tải ảnh để trích xuất văn bản thuần: Câu/Bài cùng dòng, A-D xuống dòng, công thức $...$."
-                : "PNG, JPG, JPEG, BMP, TIFF, WEBP (≤ 50MB)"
-            : outputTarget === "word"
-              ? "Tải PDF để OCR sang Word, giữ công thức LaTeX cho Toggle TeX."
-              : outputTarget === "text"
-                ? "Tải PDF để trích xuất văn bản thuần theo từng trang."
-                : "PDF nhiều trang — trả kết quả LaTeX theo từng trang."
-        }
+        hint={hints[outputTarget]?.[mode] ?? ""}
       />
 
       {loading && (
         <div className="flex items-center gap-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4 text-indigo-300">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent shrink-0" />
-          <span className="text-sm">
-            {outputTarget === "word"
-              ? "Đang OCR, tạo Word và sinh MathML..."
-              : outputTarget === "text"
-                ? "Đang OCR, trích xuất văn bản thuần..."
-                : "Đang gửi ảnh tới AI model..."}
-          </span>
+          <span className="text-sm">{loadingMsg[outputTarget]}</span>
         </div>
       )}
 
@@ -219,15 +226,19 @@ export default function OcrTab() {
         </div>
       )}
 
-      {result?.type === "word" && (
-        <WordResultBlock result={result.data} onDownloadAgain={triggerDownload} />
+      {(result?.type === "word" || result?.type === "equation") && (
+        <WordResultBlock
+          result={result.data}
+          onDownloadAgain={triggerDownload}
+          isEquation={result.type === "equation"}
+        />
       )}
 
-      {result?.type === "text" && result.data?.text !== undefined && (
-        <PlainTextResultBlock text={result.data.text} />
+      {result?.type === "examlatex" && result.data?.latex !== undefined && (
+        <ExamLatexResultBlock latex={result.data.latex} />
       )}
 
-      {result?.type === "text" &&
+      {result?.type === "examlatex" &&
         result.data?.pages?.map((page) => (
           <div key={page.page} className="space-y-2">
             <h3 className="font-semibold text-slate-200">
@@ -236,34 +247,19 @@ export default function OcrTab() {
                 <span className="ml-2 text-xs text-red-400">(lỗi: {page.error})</span>
               )}
             </h3>
-            {page.text && <PlainTextResultBlock text={page.text} />}
-          </div>
-        ))}
-
-      {result?.type === "latex" && result.data?.latex !== undefined && (
-        <LatexResultBlock latex={result.data.latex} />
-      )}
-
-      {result?.type === "latex" &&
-        result.data?.pages?.map((page) => (
-          <div key={page.page} className="space-y-2">
-            <h3 className="font-semibold text-slate-200">
-              Trang {page.page}
-              {page.error && (
-                <span className="ml-2 text-xs text-red-400">(lỗi: {page.error})</span>
-              )}
-            </h3>
-            {page.latex && <LatexResultBlock latex={page.latex} />}
+            {page.latex && <ExamLatexResultBlock latex={page.latex} />}
           </div>
         ))}
     </div>
   );
 }
 
-function WordResultBlock({ result, onDownloadAgain }) {
+function WordResultBlock({ result, onDownloadAgain, isEquation = false }) {
+  const label = isEquation ? "Equation (.docx)" : "Word + Toggle TeX";
+  const formatLabel = isEquation ? "OMML Equation" : "Toggle TeX";
+
   return (
     <div className="space-y-4">
-      {/* Success header */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
@@ -272,7 +268,7 @@ function WordResultBlock({ result, onDownloadAgain }) {
             </svg>
           </div>
           <div>
-            <h3 className="font-semibold text-emerald-300">Đã tạo xong file Word</h3>
+            <h3 className="font-semibold text-emerald-300">Đã tạo xong file {label}</h3>
             <p className="text-sm text-emerald-400/70">
               File: <span className="font-medium">{result.filename}</span>
             </p>
@@ -289,24 +285,19 @@ function WordResultBlock({ result, onDownloadAgain }) {
         </button>
       </div>
 
-      {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryItem label="Loại nguồn" value={result.source_type === "pdf" ? "PDF" : "Ảnh"} />
         <SummaryItem label="Tổng công thức" value={String(result.total_formulas)} />
-        <SummaryItem label="Định dạng CT" value="Toggle TeX" />
+        <SummaryItem label="Định dạng CT" value={formatLabel} />
         <SummaryItem label="Trang lỗi OCR" value={String(result.errors)} />
       </div>
 
-      {/* Pages summary */}
       {result.pages?.length > 0 && (
         <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
           <h4 className="text-sm font-semibold text-slate-300 mb-3">Tổng hợp theo trang</h4>
           <div className="grid gap-2 sm:grid-cols-2">
             {result.pages.map((page) => (
-              <div
-                key={page.page}
-                className="rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm"
-              >
+              <div key={page.page} className="rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm">
                 <div className="font-medium text-slate-200">Trang {page.page}</div>
                 <div className="mt-1 text-slate-400">
                   Công thức: <span className="font-medium text-slate-300">{page.formula_count}</span>
@@ -320,9 +311,8 @@ function WordResultBlock({ result, onDownloadAgain }) {
         </div>
       )}
 
-      <LatexOutputPanel latexOutput={result.latex_output} />
+      {!isEquation && <LatexOutputPanel latexOutput={result.latex_output} />}
 
-      {/* Formula list */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-slate-300">Danh sách công thức LaTeX / MathML</h4>
@@ -336,7 +326,7 @@ function WordResultBlock({ result, onDownloadAgain }) {
         )}
 
         {result.formulas?.map((formula) => (
-          <FormulaCard key={formula.id} formula={formula} />
+          <FormulaCard key={formula.id} formula={formula} isEquation={isEquation} />
         ))}
       </div>
     </div>
@@ -355,7 +345,6 @@ function LatexOutputPanel({ latexOutput }) {
         </div>
         <CopyButton text={latexOutput || ""} label="Copy tất cả LaTeX" />
       </div>
-
       {latexOutput ? (
         <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-emerald-400 border border-slate-800">
           {latexOutput}
@@ -378,7 +367,7 @@ function SummaryItem({ label, value }) {
   );
 }
 
-function FormulaCard({ formula }) {
+function FormulaCard({ formula, isEquation = false }) {
   return (
     <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -393,19 +382,21 @@ function FormulaCard({ formula }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <CopyButton text={formula.latex_source || formula.latex} label="LaTeX" />
-          <CopyButton text={formula.raw_latex || formula.latex} label="OCR gốc" />
+          {!isEquation && <CopyButton text={formula.raw_latex || formula.latex} label="OCR gốc" />}
           <CopyButton text={formula.mathml || ""} label="MathML" />
         </div>
       </div>
 
-      {formula.raw_latex && formula.raw_latex !== formula.latex && (
+      {!isEquation && formula.raw_latex && formula.raw_latex !== formula.latex && (
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-300">
           Công thức đã được làm sạch tiếng Việt/Unicode trong vùng TeX để MathType Toggle TeX xử lý ổn định hơn.
         </div>
       )}
 
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">LaTeX cho Toggle TeX</div>
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+          {isEquation ? "LaTeX" : "LaTeX cho Toggle TeX"}
+        </div>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-sm text-emerald-400 border border-slate-800">
           {formula.latex_source || formula.latex}
         </pre>
@@ -439,39 +430,21 @@ function FormulaCard({ formula }) {
   );
 }
 
-function PlainTextResultBlock({ text }) {
+function ExamLatexResultBlock({ latex }) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h4 className="text-sm font-semibold text-slate-300">Text thuần</h4>
+          <h4 className="text-sm font-semibold text-slate-300">Exam LaTeX</h4>
           <p className="text-xs text-slate-500 mt-0.5">
-            Tiền tố Câu/Bài cùng dòng · A–D mỗi phương án một dòng · công thức $…$ / \[…\]
+            Định dạng <code className="text-slate-400">\begin&#123;ex&#125;...\choice...\end&#123;ex&#125;</code> — tương thích exam-latex-creator
           </p>
         </div>
-        <CopyButton text={text} />
-      </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-amber-300 border border-slate-800 leading-relaxed">
-        {text}
-      </pre>
-    </div>
-  );
-}
-
-function LatexResultBlock({ latex }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-300">LaTeX</h4>
         <CopyButton text={latex} />
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-emerald-400 border border-slate-800">
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-emerald-400 border border-slate-800 leading-relaxed">
         {latex}
       </pre>
-      <h4 className="text-sm font-semibold text-slate-300">Preview</h4>
-      <div className="rounded-lg border border-slate-700 bg-white p-4">
-        <MathPreview latex={latex} display />
-      </div>
     </div>
   );
 }

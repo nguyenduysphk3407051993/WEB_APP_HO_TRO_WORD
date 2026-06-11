@@ -103,6 +103,34 @@ QUY TAC:
 
 CHI TRA VE NOI DUNG THUAN."""
 
+PROMPT_EXAM_LATEX = """Ban la chuyen gia OCR tai lieu thi cu Viet Nam.
+Hay trich xuat noi dung tu anh va chuyen sang dinh dang LaTeX bai tap theo chuan giao duc Viet Nam.
+
+QUY TAC DINH DANG:
+1. Moi cau hoi trac nghiem dung moi truong \\begin{ex}...\\end{ex}
+2. Truoc moi cau them dong nhan dang: %%%=============EX_N=============%%% (N la so thu tu lien tuc)
+3. Phuong an dung lenh \\choice tren 4 dong rieng: \\choice\\n{A}\\n{B}\\n{\\\\True C}\\n{D} voi phuong an dung co \\True phia truoc; neu khong biet dap an dung thi de nguyen (khong \\True)
+4. Neu co loi giai trong anh, dua vao \\loigiai{...}; neu khong co, bo qua
+5. Cong thuc inline boc trong $...$, cong thuc display boc trong \\[...\\]
+6. So thap phan dung {,} ngan phan nguyen va phan thap phan: $1{,}5$ thay vi $1.5$
+7. Tieu de bai, cau dan, boi canh giu nguyen truoc cau hoi dau tien
+8. Cau hoi dung/sai (True/False 4 y): dung \\choiceTF{a}{b}{c}{d} voi y dung co \\True
+9. Tieng Viet giu nguyen dau, khong dich
+10. Khong them \\documentclass, \\begin{document}, \\usepackage, code fence, giai thich
+
+VI DU DAU RA:
+%%%=============EX_1=============%%%
+\\begin{ex}%[ID]
+Noi dung cau hoi trac nghiem...
+\\choice
+{Phuong an A}
+{Phuong an B}
+{\\True Phuong an C dung}
+{Phuong an D}
+\\end{ex}
+
+CHI TRA VE CODE LATEX THUAN."""
+
 
 class OCRService:
     """OCR service dùng 9router hoặc Gemini qua API key pool."""
@@ -165,6 +193,10 @@ class OCRService:
     @staticmethod
     def _select_text_prompt(mode: str) -> str:
         return PROMPT_TEXT_PAGE if mode == "page" else PROMPT_TEXT_SINGLE
+
+    @staticmethod
+    def _select_exam_latex_prompt(mode: str) -> str:  # noqa: ARG004
+        return PROMPT_EXAM_LATEX
 
     @staticmethod
     def _normalize_image(image_bytes: bytes) -> bytes:
@@ -435,6 +467,29 @@ class OCRService:
             return results
         finally:
             doc.close()
+
+    async def image_to_exam_latex(self, image_bytes: bytes, mode: str = "page") -> str:
+        prompt = self._select_exam_latex_prompt(mode)
+        result = await self._ocr_with_retry(
+            self._normalize_image(image_bytes), prompt, "image/png"
+        )
+        return self._strip_markdown_fence(result)
+
+    async def pdf_to_exam_latex_pages(
+        self,
+        pdf_bytes: bytes,
+        dpi: int = 200,
+        mode: str = "page",
+        max_concurrent_pages: int = 10,
+    ) -> list[dict]:
+        prompt = self._select_exam_latex_prompt(mode)
+        return await self._pdf_to_text_pages(
+            pdf_bytes,
+            prompt=prompt,
+            field_name="latex",
+            dpi=dpi,
+            max_concurrent_pages=max_concurrent_pages,
+        )
 
     def combine_markdown_pages(self, pages: list[dict]) -> str:
         chunks: list[str] = []
