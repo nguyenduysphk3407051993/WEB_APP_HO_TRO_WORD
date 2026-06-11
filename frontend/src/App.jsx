@@ -1,8 +1,6 @@
 import { useState } from "react";
 import OcrTab from "./components/OcrTab";
-import LatexToMathTypeTab from "./components/LatexToMathTypeTab";
 import LatexToEquationTab from "./components/LatexToEquationTab";
-import DocxToLatexTab from "./components/DocxToLatexTab";
 import AdminKeysTab from "./components/AdminKeysTab";
 
 // SVG Icons
@@ -13,22 +11,10 @@ const Icons = {
         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   ),
-  mathtype: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-        d="M4.5 12h15m-7.5-7.5v15M3 7l3-3 3 3M15 17l3 3 3-3" />
-    </svg>
-  ),
   equation: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
         d="M9 7h6M9 12h6m-6 5h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
-    </svg>
-  ),
-  docx2tex: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
     </svg>
   ),
   admin: (
@@ -60,15 +46,6 @@ const TABS = [
     desc: "Nhận dạng tài liệu, giữ công thức LaTeX",
   },
   {
-    id: "mathtype",
-    label: "LaTeX → MathType",
-    badge: "MathML",
-    badgeColor: "bg-sky-500/20 text-sky-300",
-    icon: Icons.mathtype,
-    component: LatexToMathTypeTab,
-    desc: "Chuyển đổi sang định dạng MathType",
-  },
-  {
     id: "equation",
     label: "LaTeX → Word Equation",
     badge: "OMML",
@@ -76,15 +53,6 @@ const TABS = [
     icon: Icons.equation,
     component: LatexToEquationTab,
     desc: "Tạo file Word với Equation Editor",
-  },
-  {
-    id: "docx2tex",
-    label: "Word / MathType → LaTeX",
-    badge: "TeX",
-    badgeColor: "bg-amber-500/20 text-amber-300",
-    icon: Icons.docx2tex,
-    component: DocxToLatexTab,
-    desc: "Trích xuất công thức từ Word",
   },
   {
     id: "admin",
@@ -194,9 +162,7 @@ export default function App() {
           <div className="flex items-center gap-3 min-w-0">
             <span className={`shrink-0 p-2 rounded-lg ${
               active === "ocr" ? "bg-violet-500/15 text-violet-400" :
-              active === "mathtype" ? "bg-sky-500/15 text-sky-400" :
               active === "equation" ? "bg-emerald-500/15 text-emerald-400" :
-              active === "docx2tex" ? "bg-amber-500/15 text-amber-400" :
               "bg-rose-500/15 text-rose-400"
             }`}>
               {activeTab.icon}
