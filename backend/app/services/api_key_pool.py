@@ -218,6 +218,7 @@ class ApiKeyPool:
 
 
 _pool: Optional[ApiKeyPool] = None
+_gemini_pool: Optional[ApiKeyPool] = None
 
 
 def init_pool(keys: list[str], max_concurrent_per_key: int = 3,
@@ -231,3 +232,16 @@ def get_pool() -> ApiKeyPool:
     if _pool is None:
         raise RuntimeError("Pool chưa init.")
     return _pool
+
+
+def init_gemini_pool(keys: list[str], max_concurrent_per_key: int = 10,
+                     persist_path: Optional[Path] = None) -> ApiKeyPool:
+    global _gemini_pool
+    _gemini_pool = ApiKeyPool(keys, max_concurrent_per_key, persist_path)
+    return _gemini_pool
+
+
+def get_gemini_pool() -> ApiKeyPool:
+    if _gemini_pool is None:
+        raise RuntimeError("Gemini pool chưa init.")
+    return _gemini_pool

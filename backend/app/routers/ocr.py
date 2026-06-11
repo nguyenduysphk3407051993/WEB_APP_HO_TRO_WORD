@@ -234,6 +234,50 @@ async def ocr_pdf(
     }
 
 
+@router.post("/image-to-text")
+async def ocr_image_to_text(
+    file: UploadFile = File(...),
+    mode: str = Form("page", description='"single" = 1 cong thuc, "page" = ca trang'),
+) -> dict:
+    """OCR anh thanh van ban thuan: Cau/Bai N cung dong, A-D xuong dong, cong thuc $...$."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_IMAGE_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        text = await ocr_service.image_to_text(content, mode=mode)
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR: {exc}") from exc
+    return {"text": text, "mode": mode}
+
+
+@router.post("/pdf-to-text")
+async def ocr_pdf_to_text(
+    file: UploadFile = File(...),
+    dpi: int = Form(200),
+    mode: str = Form("page"),
+    max_concurrent: int = Form(10, description="So trang xu ly song song"),
+) -> dict:
+    """OCR PDF thanh van ban thuan theo tung trang."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_PDF_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        results = await ocr_service.pdf_to_text_pages(
+            content, dpi=dpi, mode=mode, max_concurrent_pages=max_concurrent
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR PDF: {exc}") from exc
+    return {
+        "pages": results,
+        "total": len(results),
+        "errors": sum(1 for item in results if item.get("error")),
+    }
+
+
 @router.post("/pdf-to-docx")
 async def ocr_pdf_to_docx(
     file: UploadFile = File(...),

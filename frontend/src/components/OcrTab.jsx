@@ -6,8 +6,10 @@ import {
   downloadOcrDocx,
   ocrImage,
   ocrImageToDocx,
+  ocrImageToText,
   ocrPdf,
   ocrPdfToDocx,
+  ocrPdfToText,
 } from "../api";
 
 const saveBlob = (blob, filename) => {
@@ -47,6 +49,15 @@ export default function OcrTab() {
 
         await triggerDownload(payload);
         setResult({ type: "word", data: payload });
+        return;
+      }
+
+      if (outputTarget === "text") {
+        const data =
+          mode === "image"
+            ? await ocrImageToText(file, ocrMode)
+            : await ocrPdfToText(file, { mode: "page", maxConcurrent });
+        setResult({ type: "text", data });
         return;
       }
 
@@ -119,6 +130,7 @@ export default function OcrTab() {
           <span className="font-semibold text-slate-300">Đầu ra:</span>
           {[
             { id: "word", label: "Word + Toggle TeX" },
+            { id: "text", label: "Text thuần" },
             { id: "latex", label: "LaTeX" },
           ].map((item) => (
             <button
@@ -174,10 +186,14 @@ export default function OcrTab() {
           mode === "image"
             ? outputTarget === "word"
               ? "Tải ảnh để tạo Word với công thức LaTeX cho MathType Toggle TeX."
-              : "PNG, JPG, JPEG, BMP, TIFF, WEBP (≤ 50MB)"
+              : outputTarget === "text"
+                ? "Tải ảnh để trích xuất văn bản thuần: Câu/Bài cùng dòng, A-D xuống dòng, công thức $...$."
+                : "PNG, JPG, JPEG, BMP, TIFF, WEBP (≤ 50MB)"
             : outputTarget === "word"
               ? "Tải PDF để OCR sang Word, giữ công thức LaTeX cho Toggle TeX."
-              : "PDF nhiều trang — trả kết quả LaTeX theo từng trang."
+              : outputTarget === "text"
+                ? "Tải PDF để trích xuất văn bản thuần theo từng trang."
+                : "PDF nhiều trang — trả kết quả LaTeX theo từng trang."
         }
       />
 
@@ -187,7 +203,9 @@ export default function OcrTab() {
           <span className="text-sm">
             {outputTarget === "word"
               ? "Đang OCR, tạo Word và sinh MathML..."
-              : "Đang gửi ảnh tới 9router..."}
+              : outputTarget === "text"
+                ? "Đang OCR, trích xuất văn bản thuần..."
+                : "Đang gửi ảnh tới AI model..."}
           </span>
         </div>
       )}
@@ -204,6 +222,23 @@ export default function OcrTab() {
       {result?.type === "word" && (
         <WordResultBlock result={result.data} onDownloadAgain={triggerDownload} />
       )}
+
+      {result?.type === "text" && result.data?.text !== undefined && (
+        <PlainTextResultBlock text={result.data.text} />
+      )}
+
+      {result?.type === "text" &&
+        result.data?.pages?.map((page) => (
+          <div key={page.page} className="space-y-2">
+            <h3 className="font-semibold text-slate-200">
+              Trang {page.page}
+              {page.error && (
+                <span className="ml-2 text-xs text-red-400">(lỗi: {page.error})</span>
+              )}
+            </h3>
+            {page.text && <PlainTextResultBlock text={page.text} />}
+          </div>
+        ))}
 
       {result?.type === "latex" && result.data?.latex !== undefined && (
         <LatexResultBlock latex={result.data.latex} />
@@ -400,6 +435,25 @@ function FormulaCard({ formula }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PlainTextResultBlock({ text }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-300">Text thuần</h4>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Tiền tố Câu/Bài cùng dòng · A–D mỗi phương án một dòng · công thức $…$ / \[…\]
+          </p>
+        </div>
+        <CopyButton text={text} />
+      </div>
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-amber-300 border border-slate-800 leading-relaxed">
+        {text}
+      </pre>
     </div>
   );
 }

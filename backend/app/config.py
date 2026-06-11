@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     NINEROUTER_TIMEOUT_SECONDS: int = 180
     NINEROUTER_MAX_TOKENS: int = 16384
 
+    # ============ Gemini API ============
+    GEMINI_API_KEY: str = ""
+    GEMINI_API_KEYS: str = ""
+    GEMINI_KEYS_FILE: Path = Path("/app/data/gemini_keys.json")
+    GEMINI_MAX_CONCURRENT_PER_KEY: int = 10
+    GEMINI_RETRY_ATTEMPTS: int = 3
+    GEMINI_TIMEOUT_SECONDS: int = 180
+    GEMINI_MAX_TOKENS: int = 8192
+
     # ============ Admin ============
     # Mật khẩu để truy cập trang quản lý keys (BẮT BUỘC khi deploy public)
     ADMIN_PASSWORD: str = ""
@@ -35,6 +44,11 @@ class Settings(BaseSettings):
     @property
     def ninerouter_keys_list(self) -> list[str]:
         raw_keys = [self.NINEROUTER_API_KEY, *self.NINEROUTER_API_KEYS.split(",")]
+        return list(dict.fromkeys(k.strip() for k in raw_keys if k.strip()))
+
+    @property
+    def gemini_keys_list(self) -> list[str]:
+        raw_keys = [self.GEMINI_API_KEY, *self.GEMINI_API_KEYS.split(",")]
         return list(dict.fromkeys(k.strip() for k in raw_keys if k.strip()))
 
     class Config:

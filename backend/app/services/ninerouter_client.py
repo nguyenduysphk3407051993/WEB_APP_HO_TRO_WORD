@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services.gemini_client import GEMINI_MODELS, GEMINI_MODEL_IDS
 
 NINEROUTER_MODELS = [
     {"id": "cx/gpt-5.5", "name": "GPT-5.5"},
@@ -20,10 +21,28 @@ NINEROUTER_MODELS = [
 ]
 NINEROUTER_MODEL_IDS = {item["id"] for item in NINEROUTER_MODELS}
 
+ALL_PROVIDERS = [
+    {
+        "id": "9router",
+        "name": "9router (OpenAI compatible)",
+        "models": NINEROUTER_MODELS,
+    },
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "models": GEMINI_MODELS,
+    },
+]
+_ALL_MODEL_IDS: dict[str, set[str]] = {
+    "9router": NINEROUTER_MODEL_IDS,
+    "gemini": GEMINI_MODEL_IDS,
+}
+
 
 class ProviderConfig:
-    def __init__(self, path: Path, default_model: str) -> None:
+    def __init__(self, path: Path, default_provider: str, default_model: str) -> None:
         self.path = path
+        self.provider = default_provider
         self.model = default_model
         self.load()
 
@@ -32,35 +51,63 @@ class ProviderConfig:
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
+            provider = str(data.get("provider", "")).strip()
             model = str(data.get("model", "")).strip()
-            if model:
+            if provider in _ALL_MODEL_IDS and model in _ALL_MODEL_IDS[provider]:
+                self.provider = provider
+                self.model = model
+            elif model and model in NINEROUTER_MODEL_IDS:
+                # backward compat: file cũ không có trường provider
+                self.provider = "9router"
                 self.model = model
         except (OSError, ValueError, TypeError):
             return
 
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(
+                {"provider": self.provider, "model": self.model},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def set_provider(self, provider: str, model: str) -> None:
+        provider = provider.strip()
+        model = model.strip()
+        if provider not in _ALL_MODEL_IDS:
+            raise ValueError(f"Provider '{provider}' không được hỗ trợ.")
+        if model not in _ALL_MODEL_IDS[provider]:
+            raise ValueError(f"Model '{model}' không thuộc provider '{provider}'.")
+        self.provider = provider
+        self.model = model
+        self._save()
+
     def set_model(self, model: str) -> str:
+        """Backward-compat: chỉ đổi model trong 9router."""
         model = model.strip()
         if model not in NINEROUTER_MODEL_IDS:
             raise ValueError("Model 9router không được hỗ trợ.")
+        self.provider = "9router"
         self.model = model
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps({"model": model}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        self._save()
         return model
 
     def public_config(self) -> dict[str, Any]:
         return {
-            "provider": "9router",
+            "provider": self.provider,
             "base_url": settings.NINEROUTER_BASE_URL,
             "model": self.model,
             "models": NINEROUTER_MODELS,
+            "providers": ALL_PROVIDERS,
         }
 
 
 provider_config = ProviderConfig(
     settings.PROVIDER_CONFIG_FILE,
+    "9router",
     settings.NINEROUTER_MODEL,
 )
 

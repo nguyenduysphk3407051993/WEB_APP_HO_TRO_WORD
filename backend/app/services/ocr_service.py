@@ -1,4 +1,4 @@
-"""OCR tài liệu/ảnh qua 9router, hỗ trợ xuất LaTeX hoặc nội dung Word."""
+"""OCR tài liệu/ảnh qua 9router hoặc Gemini, hỗ trợ xuất LaTeX hoặc nội dung Word."""
 from __future__ import annotations
 
 import asyncio
@@ -10,8 +10,9 @@ from typing import Optional
 from PIL import Image
 
 from app.config import settings
-from app.services.api_key_pool import ApiKey, ApiKeyPool, get_pool
-from app.services.ninerouter_client import create_vision_completion
+from app.services.api_key_pool import ApiKey, ApiKeyPool, get_gemini_pool, get_pool
+from app.services import gemini_client as _gemini_client
+from app.services.ninerouter_client import create_vision_completion, provider_config
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +76,43 @@ QUY TAC:
 
 CHI TRA VE NOI DUNG MARKDOWN."""
 
+PROMPT_TEXT_SINGLE = """Ban la chuyen gia OCR tai lieu giao duc Viet Nam. Hay trich xuat noi dung trong anh thanh van ban thuan theo cac quy tac sau.
+
+QUY TAC:
+1. TIEN TO CAU HOI: Cac cum tu "Cau N", "Bai N", "Vi du N" (N la so thu tu) PHAI viet CUNG DONG voi noi dung cau hoi, KHONG xuong dong. Vi du dung: "Cau 1. Tim x biet..." --- Vi du SAI: "Cau 1\\nTim x biet..."
+2. PHUONG AN: Moi phuong an A, B, C, D tren MOT DONG RIENG. Bat dau bang "A. ", "B. ", "C. ", "D. "
+3. CONG THUC INLINE (trong cau): boc trong $...$. Vi du: $x^2 + 1 = 0$
+4. CONG THUC DISPLAY (rieng dong): boc trong \\[...\\]. Vi du: \\[ \\frac{x}{2} = 1 \\]
+5. Tieng Viet giu nguyen dau, khong dich.
+6. KHONG dung markdown (khong #, **, __, ---, code fence, v.v.).
+7. KHONG them loi giai thich hay nhan xet.
+
+CHI TRA VE NOI DUNG THUAN."""
+
+PROMPT_TEXT_PAGE = """Ban la chuyen gia OCR tai lieu giao duc Viet Nam. Hay trich xuat toan bo noi dung trang nay thanh van ban thuan theo cac quy tac sau.
+
+QUY TAC:
+1. TIEN TO CAU HOI: Cac cum tu "Cau N", "Bai N", "Vi du N" (N la so thu tu) PHAI viet CUNG DONG voi noi dung cau hoi, KHONG xuong dong. Vi du dung: "Cau 1. Tim x biet..." --- Vi du SAI: "Cau 1\\nTim x biet..."
+2. PHUONG AN: Moi phuong an A, B, C, D tren MOT DONG RIENG. Bat dau bang "A. ", "B. ", "C. ", "D. "
+3. CONG THUC INLINE (trong cau): boc trong $...$. Vi du: Cho $x^2 - 4 = 0$, tim $x$.
+4. CONG THUC DISPLAY (cong thuc rieng dong): boc trong \\[...\\]. Vi du: \\[ \\int_0^1 x^2\\,dx = \\frac{1}{3} \\]
+5. Tieng Viet giu nguyen dau, khong dich.
+6. KHONG dung markdown (khong #, **, __, ---, code fence, v.v.).
+7. KHONG them loi mo dau, ket luan hay nhan xet.
+8. Cac y nho a., b., c., d. hoac a), b), c), d) dat moi y tren mot dong rieng.
+
+CHI TRA VE NOI DUNG THUAN."""
+
 
 class OCRService:
-    """OCR service dùng 9router qua API key pool."""
+    """OCR service dùng 9router hoặc Gemini qua API key pool."""
 
     def __init__(self, pool: Optional[ApiKeyPool] = None) -> None:
         self._pool = pool
 
     def _get_pool(self) -> ApiKeyPool:
+        if provider_config.provider == "gemini":
+            return get_gemini_pool()
         return self._pool or get_pool()
 
     @staticmethod
@@ -131,6 +161,10 @@ class OCRService:
     @staticmethod
     def _select_markdown_prompt(mode: str) -> str:
         return PROMPT_WORD_PAGE if mode == "page" else PROMPT_WORD_SINGLE
+
+    @staticmethod
+    def _select_text_prompt(mode: str) -> str:
+        return PROMPT_TEXT_PAGE if mode == "page" else PROMPT_TEXT_SINGLE
 
     @staticmethod
     def _normalize_image(image_bytes: bytes) -> bytes:
@@ -185,12 +219,21 @@ class OCRService:
         prompt: str,
         mime_type: str = "image/png",
     ) -> str:
-        response = await create_vision_completion(
-            api_key=key.key,
-            image_bytes=image_bytes,
-            mime_type=mime_type,
-            prompt=prompt,
-        )
+        if provider_config.provider == "gemini":
+            response = await _gemini_client.create_vision_completion(
+                api_key=key.key,
+                image_bytes=image_bytes,
+                mime_type=mime_type,
+                prompt=prompt,
+                model=provider_config.model,
+            )
+        else:
+            response = await create_vision_completion(
+                api_key=key.key,
+                image_bytes=image_bytes,
+                mime_type=mime_type,
+                prompt=prompt,
+            )
         return self._strip_markdown_fence(response)
 
     async def _ocr_with_retry(
@@ -200,9 +243,14 @@ class OCRService:
         mime_type: str = "image/png",
     ) -> str:
         pool = self._get_pool()
+        retry_attempts = (
+            settings.GEMINI_RETRY_ATTEMPTS
+            if provider_config.provider == "gemini"
+            else settings.NINEROUTER_RETRY_ATTEMPTS
+        )
         last_exc: Optional[Exception] = None
 
-        for attempt in range(settings.NINEROUTER_RETRY_ATTEMPTS):
+        for attempt in range(retry_attempts):
             key = await pool.acquire()
             try:
                 async with key.semaphore:
@@ -221,8 +269,61 @@ class OCRService:
                 )
 
         raise RuntimeError(
-            f"OCR thất bại sau {settings.NINEROUTER_RETRY_ATTEMPTS} lần thử. Lỗi cuối: {last_exc}"
+            f"OCR thất bại sau {retry_attempts} lần thử. Lỗi cuối: {last_exc}"
         )
+
+    @staticmethod
+    def normalize_plain_text(text: str) -> str:
+        """Chuẩn hoá văn bản thuần sau OCR:
+        - Gộp 'Câu/Bài/Ví dụ N' đứng riêng dòng vào dòng tiếp theo
+        - Tách phương án A/B/C/D nội tuyến ra từng dòng riêng
+        - Chuẩn hoá $$...$$ → \\[...\\]
+        - Thu gọn dòng trống thừa
+        """
+        _standalone_prefix = re.compile(
+            r"^((?:C[aâ]u|B[aà]i|V[ií][\s\xa0]+d[uụ])\s+\d+[A-Za-z]?(?:\s*[:.)\-])?)\s*$",
+            re.IGNORECASE | re.UNICODE,
+        )
+        _inline_options = re.compile(r"(?<=\S)\s{2,}(?=[A-D][.)])")
+        _dollar_block = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+
+        lines = text.splitlines()
+        merged: list[str] = []
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+            if _standalone_prefix.fullmatch(stripped):
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines):
+                    merged.append(f"{stripped} {lines[j].strip()}")
+                    i = j + 1
+                    continue
+            merged.append(lines[i].rstrip())
+            i += 1
+
+        exploded: list[str] = []
+        for line in merged:
+            parts = _inline_options.split(line)
+            if len(parts) > 1:
+                exploded.extend(p.strip() for p in parts if p.strip())
+            else:
+                exploded.append(line)
+
+        result = "\n".join(exploded)
+        result = _dollar_block.sub(
+            lambda m: f"\\[{m.group(1).strip()}\\]", result
+        )
+        result = re.sub(r"\n{3,}", "\n\n", result)
+        return result.strip()
+
+    async def image_to_text(self, image_bytes: bytes, mode: str = "page") -> str:
+        prompt = self._select_text_prompt(mode)
+        result = await self._ocr_with_retry(
+            self._normalize_image(image_bytes), prompt, "image/png"
+        )
+        return self.normalize_plain_text(self._strip_markdown_fence(result))
 
     async def image_to_latex(self, image_bytes: bytes, mode: str = "single") -> str:
         prompt = self._select_latex_prompt(mode)
@@ -270,6 +371,23 @@ class OCRService:
             max_concurrent_pages=max_concurrent_pages,
         )
 
+    async def pdf_to_text_pages(
+        self,
+        pdf_bytes: bytes,
+        dpi: int = 200,
+        mode: str = "page",
+        max_concurrent_pages: int = 10,
+    ) -> list[dict]:
+        prompt = self._select_text_prompt(mode)
+        return await self._pdf_to_text_pages(
+            pdf_bytes,
+            prompt=prompt,
+            field_name="text",
+            normalizer=self.normalize_plain_text,
+            dpi=dpi,
+            max_concurrent_pages=max_concurrent_pages,
+        )
+
     async def _pdf_to_text_pages(
         self,
         pdf_bytes: bytes,
@@ -278,6 +396,7 @@ class OCRService:
         field_name: str,
         dpi: int = 200,
         max_concurrent_pages: int = 10,
+        normalizer=None,
     ) -> list[dict]:
         import fitz
 
@@ -301,7 +420,10 @@ class OCRService:
                 async with sem:
                     try:
                         text = await self._ocr_with_retry(img_bytes, prompt, "image/png")
-                        text = self._normalize_display_delimiters(text)
+                        if normalizer is not None:
+                            text = normalizer(self._strip_markdown_fence(text))
+                        else:
+                            text = self._normalize_display_delimiters(text)
                         return {"page": page_num, field_name: text, "error": None}
                     except Exception as exc:
                         logger.exception("Loi OCR trang %d", page_num)
