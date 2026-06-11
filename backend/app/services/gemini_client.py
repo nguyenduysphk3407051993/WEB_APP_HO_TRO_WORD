@@ -12,12 +12,18 @@ from app.config import settings
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 GEMINI_MODELS = [
-    {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash"},
-    {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite"},
-    {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
-    {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
+    {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+    {"id": "gemini/gemini-2.5-flash-lite", "name": "Gemini 2.5 Flash Lite"},
+    {"id": "gemini/gemini-3-flash-preview", "name": "Gemini 3 Flash Preview"},
 ]
 GEMINI_MODEL_IDS = {item["id"] for item in GEMINI_MODELS}
+
+_DEFAULT_MODEL = "gemini/gemini-2.5-flash"
+
+
+def _model_api_id(model: str) -> str:
+    """Trả về phần model ID thuần để dùng trong URL Google API (bỏ prefix 'gemini/')."""
+    return model.split("/")[-1] if "/" in model else model
 
 
 def _extract_text(payload: dict[str, Any]) -> str:
@@ -36,7 +42,7 @@ async def create_vision_completion(
     model: str,
 ) -> str:
     image_data = base64.b64encode(image_bytes).decode("ascii")
-    url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={api_key.strip()}"
+    url = f"{GEMINI_BASE_URL}/{_model_api_id(model)}:generateContent?key={api_key.strip()}"
     payload = {
         "contents": [
             {
@@ -67,8 +73,8 @@ async def create_vision_completion(
 
 
 async def test_single_key(key: str, model: str | None = None) -> dict:
-    model = model or "gemini-3.5-flash"
-    url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={key.strip()}"
+    model = model or _DEFAULT_MODEL
+    url = f"{GEMINI_BASE_URL}/{_model_api_id(model)}:generateContent?key={key.strip()}"
     payload = {
         "contents": [{"parts": [{"text": "Reply with only the word: OK"}]}],
         "generationConfig": {"maxOutputTokens": 16},

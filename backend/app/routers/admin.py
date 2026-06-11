@@ -187,7 +187,7 @@ async def test_gemini_keys(
     keys = [k.strip() for k in payload.keys if k.strip()]
     if not keys:
         raise HTTPException(400, "Không có key để test.")
-    model = provider_config.model if provider_config.provider == "gemini" else "gemini-3.5-flash"
+    model = provider_config.model if provider_config.provider == "gemini" else "gemini/gemini-2.5-flash"
     results = await asyncio.gather(
         *[_gemini_client.test_single_key(k, model) for k in keys]
     )
