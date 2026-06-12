@@ -707,15 +707,15 @@ class ConverterService:
                     if any(d in style_name for d in ("2", "3", "4")):
                         ilvl = 1
                 if ilvl >= 1:
-                    # L2 phụ
-                    fmt.left_indent = Cm(1.8)
-                    fmt.first_line_indent = Cm(-0.45)
+                    # L2 phụ — block indent, first line thẳng hàng với continuation
+                    fmt.left_indent = Cm(1.0)
+                    fmt.first_line_indent = Pt(0)
                     fmt.space_before = Pt(2)
                     fmt.space_after = Pt(2)
                 else:
-                    # L1 chính
-                    fmt.left_indent = Cm(0.9)
-                    fmt.first_line_indent = Cm(-0.45)
+                    # L1 chính — block indent
+                    fmt.left_indent = Cm(0.5)
+                    fmt.first_line_indent = Pt(0)
                     fmt.space_before = Pt(5)
                     fmt.space_after = Pt(2)
                 continue
@@ -725,24 +725,20 @@ class ConverterService:
             concl_match = concl_re.match(text)
 
             if l2_match:
-                # L2 phụ — indent sâu hơn L1
-                fmt.left_indent = Cm(1.8)
-                fmt.first_line_indent = Cm(-0.45)
+                # L2 phụ — block indent sâu hơn L1, first line = left indent
+                fmt.left_indent = Cm(1.0)
+                fmt.first_line_indent = Pt(0)
                 fmt.space_before = Pt(2)
                 fmt.space_after = Pt(2)
                 self._reset_tab_stops(paragraph)
-                fmt.tab_stops.add_tab_stop(Cm(1.8), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
-                self._convert_manual_prefix_to_tab(paragraph, l2_match.group(1))
 
             elif l1_match:
-                # L1 chính — indent vừa, marker in đậm
-                fmt.left_indent = Cm(0.9)
-                fmt.first_line_indent = Cm(-0.45)
+                # L1 chính — block indent, marker in đậm, first line = left indent
+                fmt.left_indent = Cm(0.5)
+                fmt.first_line_indent = Pt(0)
                 fmt.space_before = Pt(5)
                 fmt.space_after = Pt(2)
                 self._reset_tab_stops(paragraph)
-                fmt.tab_stops.add_tab_stop(Cm(0.9), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
-                self._convert_manual_prefix_to_tab(paragraph, l1_match.group(1))
                 # Bold marker run đầu tiên
                 if paragraph.runs:
                     paragraph.runs[0].bold = True
