@@ -292,16 +292,18 @@ async def ocr_pdf_to_docx(
         raise HTTPException(413, "File qua lon.")
 
     out = new_output_path(".docx")
+    images_dir = out.parent / "images"
     download_name = _build_download_name(file.filename, "pdf-to-word")
     try:
+        extracted_images = ocr_service.extract_pdf_images(content, images_dir)
         pages_data = await ocr_service.pdf_to_markdown_pages(
             content,
             dpi=dpi,
             mode=mode,
             max_concurrent_pages=max_concurrent,
         )
-        markdown = ocr_service.combine_markdown_pages(pages_data)
-        converter_service.markdown_to_toggle_tex_docx(markdown, out)
+        markdown = ocr_service.combine_markdown_pages(pages_data, extracted_images)
+        converter_service.markdown_to_toggle_tex_docx(markdown, out, resource_path=out.parent)
         formulas, pages = _build_formula_catalog(pages_data, "markdown")
     except Exception as exc:
         raise HTTPException(500, f"Loi tao Word tu PDF: {exc}") from exc
@@ -408,13 +410,15 @@ async def ocr_pdf_to_equation(
         raise HTTPException(413, "File qua lon.")
 
     out = new_output_path(".docx")
+    images_dir = out.parent / "images"
     download_name = _build_download_name(file.filename, "pdf-to-equation")
     try:
+        extracted_images = ocr_service.extract_pdf_images(content, images_dir)
         pages_data = await ocr_service.pdf_to_markdown_pages(
             content, dpi=dpi, mode=mode, max_concurrent_pages=max_concurrent
         )
-        markdown = ocr_service.combine_markdown_pages(pages_data)
-        converter_service.markdown_to_docx(markdown, out)
+        markdown = ocr_service.combine_markdown_pages(pages_data, extracted_images)
+        converter_service.markdown_to_docx(markdown, out, resource_path=out.parent)
         formulas, pages = _build_formula_catalog(pages_data, "markdown")
     except Exception as exc:
         raise HTTPException(500, f"Loi tao Word Equation tu PDF: {exc}") from exc

@@ -491,18 +491,81 @@ class OCRService:
             max_concurrent_pages=max_concurrent_pages,
         )
 
-    def combine_markdown_pages(self, pages: list[dict]) -> str:
+    def extract_pdf_images(
+        self, pdf_bytes: bytes, output_images_dir: Path
+    ) -> dict[int, list[str]]:
+        """Trích xuất ảnh nhúng từ PDF, lưu vào output_images_dir.
+        Trả về {page_num: ['images/page_X_img_Y.ext', ...]}"""
+        import fitz
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        output_images_dir.mkdir(parents=True, exist_ok=True)
+        extracted: dict[int, list[str]] = {}
+
+        try:
+            for page_index in range(len(doc)):
+                page_num = page_index + 1
+                page = doc.load_page(page_index)
+                image_list = page.get_images(full=True)
+                page_images: list[str] = []
+
+                for img_idx, img in enumerate(image_list):
+                    try:
+                        xref = img[0]
+                        base_image = doc.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+
+                        # Bỏ qua ảnh quá nhỏ (icon, vạch phân cách, trang trí)
+                        if len(image_bytes) < 2048:
+                            continue
+
+                        img_name = f"page_{page_num}_img_{img_idx + 1}.{image_ext}"
+                        (output_images_dir / img_name).write_bytes(image_bytes)
+                        page_images.append(f"images/{img_name}")
+                    except Exception as exc:
+                        logger.warning(
+                            "Loi trich xuat anh xref %s trang %d: %s",
+                            img[0], page_num, exc,
+                        )
+
+                if page_images:
+                    extracted[page_num] = page_images
+        finally:
+            doc.close()
+
+        return extracted
+
+    def combine_markdown_pages(
+        self,
+        pages: list[dict],
+        extracted_images: dict[int, list[str]] | None = None,
+    ) -> str:
         chunks: list[str] = []
+        images = extracted_images or {}
 
         for page in sorted(pages, key=lambda item: item["page"]):
-            if page.get("markdown"):
-                chunks.append(page["markdown"].strip())
+            page_num = page.get("page")
+            text = (page.get("markdown") or "").strip()
+
+            # Nhúng ảnh trích xuất vào cuối nội dung trang
+            page_imgs = images.get(page_num, [])
+            img_md = (
+                "\n\n" + "\n\n".join(f"![Hinh minh hoa]({p})" for p in page_imgs)
+                if page_imgs else ""
+            )
+
+            if text:
+                chunks.append(text + img_md)
             else:
                 error_text = (page.get("error") or "Khong ro loi").strip()
-                chunks.append(
-                    f"**Khong the OCR trang {page['page']}**\n\n"
-                    f"> {error_text[:300]}"
-                )
+                if img_md:
+                    chunks.append(f"*Trang {page_num} chi co hinh anh:*{img_md}")
+                else:
+                    chunks.append(
+                        f"**Khong the OCR trang {page_num}**\n\n"
+                        f"> {error_text[:300]}"
+                    )
 
         content = "\n\n\\newpage\n\n".join(chunk for chunk in chunks if chunk.strip()).strip()
         if not content:

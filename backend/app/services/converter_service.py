@@ -175,16 +175,24 @@ class ConverterService:
         )
         return output_path
 
-    def markdown_to_docx(self, markdown_content: str, output_path: Path) -> Path:
+    def markdown_to_docx(
+        self,
+        markdown_content: str,
+        output_path: Path,
+        resource_path: Path | None = None,
+    ) -> Path:
         """Chuyen Markdown co cong thuc $...$/$$...$$ sang DOCX."""
         payload = markdown_content.strip() or " "
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        extra_args = ["--wrap=preserve"]
+        if resource_path:
+            extra_args.append(f"--resource-path={resource_path}")
         pypandoc.convert_text(
             payload,
             "docx",
             format=_MARKDOWN_DOCX_FORMAT,
             outputfile=str(output_path),
-            extra_args=["--wrap=preserve"],
+            extra_args=extra_args,
         )
         self.postprocess_ocr_docx(output_path)
         return output_path
@@ -193,16 +201,20 @@ class ConverterService:
         self,
         markdown_content: str,
         output_path: Path,
+        resource_path: Path | None = None,
     ) -> Path:
         """Chuyen Markdown sang DOCX, giu cong thuc o dang TeX text cho MathType Toggle TeX."""
         payload = self._normalize_toggle_tex_markdown(markdown_content.strip() or " ")
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        extra_args = ["--wrap=preserve"]
+        if resource_path:
+            extra_args.append(f"--resource-path={resource_path}")
         pypandoc.convert_text(
             payload,
             "docx",
             format=_MARKDOWN_TOGGLE_TEX_DOCX_FORMAT,
             outputfile=str(output_path),
-            extra_args=["--wrap=preserve"],
+            extra_args=extra_args,
         )
         self.postprocess_ocr_docx(output_path)
         return output_path
