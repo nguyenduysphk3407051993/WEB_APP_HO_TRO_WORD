@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Optional
 
+import numpy as np
 from PIL import Image
 
 from app.config import settings
@@ -583,13 +584,126 @@ class OCRService:
             owner = questions[0][0]  # hình nằm trên câu đầu → gán câu đầu
         return owner
 
+    @staticmethod
+    def _merge_boxes(boxes: list, gap: int = 25) -> list:
+        """Gộp các bbox chồng/gần nhau (cách ≤ gap) thành một."""
+        boxes = [list(b) for b in boxes]
+        changed = True
+        while changed:
+            changed = False
+            out: list = []
+            while boxes:
+                a = boxes.pop()
+                merged = False
+                for o in out:
+                    if (a[0] <= o[2] + gap and o[0] <= a[2] + gap
+                            and a[1] <= o[3] + gap and o[1] <= a[3] + gap):
+                        o[0], o[1] = min(o[0], a[0]), min(o[1], a[1])
+                        o[2], o[3] = max(o[2], a[2]), max(o[3], a[3])
+                        changed = True
+                        merged = True
+                        break
+                if not merged:
+                    out.append(a)
+            boxes = out
+        return boxes
+
+    @classmethod
+    def _detect_figures_in_array(cls, gray) -> list:
+        """Phát hiện vùng HÌNH VẼ trên ảnh trang (numpy) — dùng cho trang scan.
+        Ý tưởng: hình vẽ có ĐƯỜNG THẲNG DÀI (cạnh, trục), chữ thì không.
+        Trả về list (x0, y0, x1, y1) theo pixel của ảnh đầu vào."""
+        from scipy import ndimage
+
+        H, W = gray.shape
+        ink = gray < 160
+        if int(ink.sum()) < 50:
+            return []
+
+        # Giữ pixel thuộc đoạn thẳng ngang/dọc dài >= T (mở hình thái)
+        T = max(30, W // 38)
+        gh = ndimage.binary_opening(ink, structure=np.ones((1, T), dtype=bool))
+        gv = ndimage.binary_opening(ink, structure=np.ones((T, 1), dtype=bool))
+        graphic = gh | gv
+        if not graphic.any():
+            return []
+
+        # Nối các nét đường thành khối, gắn nhãn
+        dil = ndimage.binary_dilation(graphic, iterations=max(6, W // 140))
+        lbl, n = ndimage.label(dil)
+        if n == 0:
+            return []
+
+        min_w, min_h = max(60, W // 28), max(60, H // 35)
+        raw: list = []
+        for sl in ndimage.find_objects(lbl):
+            if sl is None:
+                continue
+            y0, y1 = sl[0].start, sl[0].stop
+            x0, x1 = sl[1].start, sl[1].stop
+            w, h = x1 - x0, y1 - y0
+            if w < min_w or h < min_h:
+                continue
+            if w > 0.92 * W:            # full-width → bảng / dòng kẻ
+                continue
+            if w * h > 0.6 * W * H:     # gần cả trang
+                continue
+            raw.append([x0, y0, x1, y1])
+
+        figures: list = []
+        for x0, y0, x1, y1 in cls._merge_boxes(raw, gap=25):
+            sub_g = int(graphic[y0:y1, x0:x1].sum())
+            sub_i = int(ink[y0:y1, x0:x1].sum())
+            if sub_i <= 0:
+                continue
+            # Chữ trong khung → đường thẳng dài KHÔNG chiếm đa số ink → loại
+            if sub_g / sub_i < 0.45 or (y1 - y0) < 60:
+                continue
+            # Bảng/lưới → nhiều đường ngang VÀ dọc đều đặn → loại
+            bw, bh = x1 - x0, y1 - y0
+            h_rows = gh[y0:y1, x0:x1].sum(axis=1) > 0.30 * bw
+            v_cols = gv[y0:y1, x0:x1].sum(axis=0) > 0.30 * bh
+            h_lines = ndimage.label(h_rows)[1]
+            v_lines = ndimage.label(v_cols)[1]
+            if h_lines >= 6 and v_lines >= 4:
+                continue
+            figures.append((x0, y0, x1, y1))
+        return figures
+
+    def _extract_scanned_figures(
+        self, page, page_num: int, output_images_dir: Path
+    ) -> list[dict]:
+        """Render trang scan ra bitmap, phát hiện & crop hình vẽ chìm trong ảnh."""
+        import fitz
+
+        zoom = max(2.0, min(4.0, 1700.0 / page.rect.width))
+        pm = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        img = Image.frombytes("RGB", (pm.width, pm.height), pm.samples)
+        gray = np.asarray(img.convert("L"))
+
+        results: list[dict] = []
+        boxes = self._detect_figures_in_array(gray)
+        pad = max(4, pm.width // 100)
+        for idx, (x0, y0, x1, y1) in enumerate(boxes):
+            cx0, cy0 = max(0, x0 - pad), max(0, y0 - pad)
+            cx1, cy1 = min(pm.width, x1 + pad), min(pm.height, y1 + pad)
+            crop = img.crop((cx0, cy0, cx1, cy1))
+            img_name = f"page_{page_num}_fig_{idx + 1}.png"
+            crop.save(output_images_dir / img_name)
+            y_frac = ((y0 + y1) / 2.0) / pm.height
+            results.append(
+                {"path": f"images/{img_name}", "question": None, "y_frac": y_frac}
+            )
+        return results
+
     def extract_pdf_images(
         self, pdf_bytes: bytes, output_images_dir: Path
     ) -> dict[int, list[dict]]:
-        """Crop đúng hình vẽ (hình học, đồ thị, biểu đồ) trong PDF, bỏ qua công thức,
-        scan nguyên trang và bảng. Render vùng hình ở 2× rồi lưu PNG; xác định
-        câu hỏi sở hữu mỗi hình để chèn đúng vị trí.
-        Trả về {page_num: [{'path': 'images/..png', 'question': N|None}, ...]}"""
+        """Crop đúng hình vẽ (hình học, đồ thị, biểu đồ) trong PDF.
+        - PDF số: tách hình từ đối tượng vector/ảnh nhúng (get_drawings/get_image_info)
+        - PDF scan: render trang → phân tích ảnh tìm vùng hình (đường thẳng dài)
+        Xác định câu sở hữu (PDF số theo toạ độ text; scan theo vị trí dọc).
+        Trả về {page_num: [{'path', 'question': N|None, 'y_frac'?}, ...]}"""
         import fitz
 
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -653,6 +767,16 @@ class OCRService:
                     except Exception as exc:
                         logger.warning("Loi render vung hinh trang %d idx %d: %s", page_num, idx, exc)
 
+                # Không có hình từ đối tượng PDF → có thể là trang scan:
+                # phân tích chính ảnh render để tìm hình vẽ chìm trong bitmap.
+                if not page_images:
+                    try:
+                        page_images = self._extract_scanned_figures(
+                            page, page_num, output_images_dir
+                        )
+                    except Exception as exc:
+                        logger.warning("Loi phat hien hinh trang scan %d: %s", page_num, exc)
+
                 if page_images:
                     extracted[page_num] = page_images
         finally:
@@ -675,15 +799,17 @@ class OCRService:
         ]
         lines = text.split("\n")
 
-        # Vị trí dòng bắt đầu mỗi số câu (lần xuất hiện đầu)
+        # Vị trí dòng bắt đầu mỗi số câu (lần xuất hiện đầu), theo thứ tự xuất hiện
         q_first: dict[int, int] = {}
         starts: list[int] = []
+        q_order: list[int] = []  # số câu theo thứ tự dọc
         for i, line in enumerate(lines):
             m = cls._MD_QUESTION_RE.match(line)
             if m:
                 num = int(m.group(1))
                 if num not in q_first:
                     q_first[num] = i
+                    q_order.append(num)
                 starts.append(i)
 
         def block_end(num) -> int | None:
@@ -693,11 +819,21 @@ class OCRService:
             after = [s for s in starts if s > idx]
             return min(after) if after else len(lines)
 
+        def owner_by_yfrac(yf: float):
+            # Trang scan không có toạ độ câu → gán theo vị trí dọc tương đối
+            if not q_order:
+                return None
+            k = int(yf * len(q_order))
+            k = max(0, min(len(q_order) - 1, k))
+            return q_order[k]
+
         inserts: dict[int, list[str]] = {}
         tail: list[str] = []
         for fig in norm:
             md = cls._img_md(fig.get("path"))
             q = fig.get("question")
+            if q is None and fig.get("y_frac") is not None:
+                q = owner_by_yfrac(float(fig["y_frac"]))
             end = block_end(q) if q is not None else None
             if end is None:
                 tail.append(md)
