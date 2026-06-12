@@ -82,9 +82,9 @@ _UNICODE_TEX_REPLACEMENTS = {
     "−": "-",
 }
 
-# Màu tiền tố câu hỏi và marker phương án: #0070C0
-_QUESTION_PREFIX_COLOR = RGBColor(0x00, 0x70, 0xC0)
-_OPTION_PREFIX_COLOR   = RGBColor(0x00, 0x70, 0xC0)
+# Màu tiền tố câu hỏi và marker phương án: #0000FF
+_QUESTION_PREFIX_COLOR = RGBColor(0x00, 0x00, 0xFF)
+_OPTION_PREFIX_COLOR   = RGBColor(0x00, 0x00, 0xFF)
 
 # Màu từ khoá lời giải: đỏ đậm #C60C4A
 _SOLUTION_KEYWORD_COLOR = RGBColor(0xC6, 0x0C, 0x4A)
@@ -270,6 +270,7 @@ class ConverterService:
             self._apply_segment_format(current, segments[0][0])
 
         self._layout_answer_choices(document)
+        self._split_solution_keyword_paragraphs(document)
         self._format_solution_sections(document)
         self._format_tables(document)
         self._format_images(document)
@@ -520,6 +521,27 @@ class ConverterService:
         if not is_subitem:
             marker_run.font.color.rgb = _OPTION_PREFIX_COLOR
         self._set_run_font(content_run, bold=False)
+
+    # ──────────────────────────────────────────────────────────────
+    # Tách keyword lời giải xuống dòng riêng
+    # ──────────────────────────────────────────────────────────────
+
+    def _split_solution_keyword_paragraphs(self, document: Document) -> None:
+        """Nếu paragraph chứa 'Lời giải:...' + nội dung, tách thành 2 đoạn riêng."""
+        for paragraph in list(document.paragraphs):
+            text = paragraph.text
+            if not text:
+                continue
+            match = _SOLUTION_KEYWORDS_RE.search(text)
+            if not match:
+                continue
+            after = text[match.end():].strip()
+            if not after:
+                continue
+            # Giữ keyword ở đoạn hiện tại, nội dung còn lại sang đoạn mới bên dưới
+            self._clear_paragraph(paragraph)
+            paragraph.add_run(match.group(1))
+            self._insert_paragraph_after(paragraph, after)
 
     # ──────────────────────────────────────────────────────────────
     # Highlight "Lời giải", "Hướng dẫn giải", "Đáp án" in đậm đỏ
