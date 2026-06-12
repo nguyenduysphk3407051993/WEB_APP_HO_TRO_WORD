@@ -491,6 +491,12 @@ class OCRService:
             max_concurrent_pages=max_concurrent_pages,
         )
 
+    # Nhận diện nhãn câu hỏi để chèn ảnh đúng vị trí
+    _PDF_QUESTION_RE = re.compile(r"^\s*(?:Câu|Bài|Ví dụ)\s*0*(\d+)", re.IGNORECASE)
+    _MD_QUESTION_RE = re.compile(
+        r"^\s*[#>*\s]*(?:\*\*)?\s*(?:Câu|Bài|Ví dụ)\s*0*(\d+)", re.IGNORECASE
+    )
+
     # Ngưỡng nhận diện hình vẽ thật (đơn vị point, 1pt ≈ 0.353mm)
     _FIG_MIN_W = 45.0       # hình hẹp hơn → là mảnh công thức/ký hiệu
     _FIG_MIN_H = 38.0       # thấp hơn → dòng công thức/gạch phân số (công thức ≤ ~35pt)
@@ -543,17 +549,52 @@ class OCRService:
             return False
         return True
 
+    @classmethod
+    def _detect_page_questions(cls, page) -> list[tuple[int, float]]:
+        """Tìm các nhãn 'Câu/Bài/Ví dụ N' trên trang kèm toạ độ y (đầu khối).
+        Trả về list (số_câu, y0) đã sắp theo y tăng dần."""
+        out: list[tuple[int, float]] = []
+        try:
+            for block in page.get_text("blocks"):
+                text = block[4] if len(block) > 4 else ""
+                y0 = float(block[1])
+                for line in str(text).splitlines():
+                    m = cls._PDF_QUESTION_RE.match(line)
+                    if m:
+                        out.append((int(m.group(1)), y0))
+                        break
+        except Exception:
+            pass
+        out.sort(key=lambda t: t[1])
+        return out
+
+    @staticmethod
+    def _figure_owner(fig_top: float, questions: list[tuple[int, float]]) -> int | None:
+        """Câu nào sở hữu hình: câu có nhãn nằm ngay trên (gần nhất) hình."""
+        if not questions:
+            return None
+        owner = None
+        for num, y0 in questions:  # đã sắp theo y tăng dần
+            if y0 <= fig_top + 12:  # nhãn câu nằm tại/trên đỉnh hình
+                owner = num
+            else:
+                break
+        if owner is None:
+            owner = questions[0][0]  # hình nằm trên câu đầu → gán câu đầu
+        return owner
+
     def extract_pdf_images(
         self, pdf_bytes: bytes, output_images_dir: Path
-    ) -> dict[int, list[str]]:
+    ) -> dict[int, list[dict]]:
         """Crop đúng hình vẽ (hình học, đồ thị, biểu đồ) trong PDF, bỏ qua công thức,
-        scan nguyên trang và bảng. Render vùng hình ở 2× rồi lưu PNG.
-        Trả về {page_num: ['images/page_X_img_Y.png', ...]}"""
+        scan nguyên trang và bảng. Render vùng hình ở 2× rồi lưu PNG; xác định
+        câu hỏi sở hữu mỗi hình để chèn đúng vị trí.
+        Trả về {page_num: [{'path': 'images/..png', 'question': N|None}, ...]}"""
         import fitz
 
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         output_images_dir.mkdir(parents=True, exist_ok=True)
-        extracted: dict[int, list[str]] = {}
+        extracted: dict[int, list[dict]] = {}
         mat = fitz.Matrix(2.0, 2.0)  # 2× resolution để giữ nét
         pad = 4.0  # đệm để không cắt mất nhãn điểm A,B,C / trục toạ độ
 
@@ -562,6 +603,7 @@ class OCRService:
                 page_num = page_index + 1
                 page = doc.load_page(page_index)
                 page_rect = page.rect
+                questions = self._detect_page_questions(page)
                 regions: list = []
 
                 # ── Ảnh raster đặt trên trang (ảnh thật, không phải scan/công thức) ──
@@ -589,9 +631,10 @@ class OCRService:
                 except Exception:
                     pass
 
-                page_images: list[str] = []
+                page_images: list[dict] = []
                 for idx, rect in enumerate(regions):
                     try:
+                        owner = self._figure_owner(rect.y0, questions)
                         rect = fitz.Rect(
                             rect.x0 - pad, rect.y0 - pad, rect.x1 + pad, rect.y1 + pad
                         ) & page_rect
@@ -600,7 +643,7 @@ class OCRService:
                         pix = page.get_pixmap(matrix=mat, clip=rect, alpha=False)
                         img_name = f"page_{page_num}_img_{idx + 1}.png"
                         (output_images_dir / img_name).write_bytes(pix.tobytes("png"))
-                        page_images.append(f"images/{img_name}")
+                        page_images.append({"path": f"images/{img_name}", "question": owner})
                     except Exception as exc:
                         logger.warning("Loi render vung hinh trang %d idx %d: %s", page_num, idx, exc)
 
@@ -611,10 +654,65 @@ class OCRService:
 
         return extracted
 
+    @staticmethod
+    def _img_md(path: str) -> str:
+        return f"![Hinh minh hoa]({path})"
+
+    @classmethod
+    def _embed_images_by_question(cls, text: str, figures: list) -> str:
+        """Chèn ảnh ngay sau khối câu hỏi sở hữu nó (cuối khối, trước câu kế tiếp).
+        Ảnh không xác định được câu → dồn xuống cuối trang."""
+        # Chuẩn hoá: chấp nhận cả list[str] lẫn list[dict]
+        norm = [
+            ({"path": f, "question": None} if isinstance(f, str) else f)
+            for f in figures
+        ]
+        lines = text.split("\n")
+
+        # Vị trí dòng bắt đầu mỗi số câu (lần xuất hiện đầu)
+        q_first: dict[int, int] = {}
+        starts: list[int] = []
+        for i, line in enumerate(lines):
+            m = cls._MD_QUESTION_RE.match(line)
+            if m:
+                num = int(m.group(1))
+                if num not in q_first:
+                    q_first[num] = i
+                starts.append(i)
+
+        def block_end(num) -> int | None:
+            idx = q_first.get(num)
+            if idx is None:
+                return None
+            after = [s for s in starts if s > idx]
+            return min(after) if after else len(lines)
+
+        inserts: dict[int, list[str]] = {}
+        tail: list[str] = []
+        for fig in norm:
+            md = cls._img_md(fig.get("path"))
+            q = fig.get("question")
+            end = block_end(q) if q is not None else None
+            if end is None:
+                tail.append(md)
+            else:
+                inserts.setdefault(end, []).append(md)
+
+        out: list[str] = []
+        for i, line in enumerate(lines):
+            for md in inserts.get(i, []):
+                out.extend(["", md, ""])
+            out.append(line)
+        for md in inserts.get(len(lines), []):
+            out.extend(["", md])
+        for md in tail:
+            out.extend(["", md])
+        return "\n".join(out)
+
     def combine_markdown_pages(
         self,
         pages: list[dict],
-        extracted_images: dict[int, list[str]] | None = None,
+        extracted_images: dict[int, list[dict]] | None = None,
     ) -> str:
         chunks: list[str] = []
         images = extracted_images or {}
@@ -622,20 +720,21 @@ class OCRService:
         for page in sorted(pages, key=lambda item: item["page"]):
             page_num = page.get("page")
             text = (page.get("markdown") or "").strip()
-
-            # Nhúng ảnh trích xuất vào cuối nội dung trang
             page_imgs = images.get(page_num, [])
-            img_md = (
-                "\n\n" + "\n\n".join(f"![Hinh minh hoa]({p})" for p in page_imgs)
-                if page_imgs else ""
-            )
 
             if text:
-                chunks.append(text + img_md)
+                # Chèn ảnh đúng vị trí câu hỏi (thay vì dồn cuối trang)
+                chunks.append(
+                    self._embed_images_by_question(text, page_imgs) if page_imgs else text
+                )
             else:
                 error_text = (page.get("error") or "Khong ro loi").strip()
-                if img_md:
-                    chunks.append(f"*Trang {page_num} chi co hinh anh:*{img_md}")
+                if page_imgs:
+                    imgs_md = "\n\n".join(
+                        self._img_md(f if isinstance(f, str) else f.get("path"))
+                        for f in page_imgs
+                    )
+                    chunks.append(f"*Trang {page_num} chi co hinh anh:*\n\n{imgs_md}")
                 else:
                     chunks.append(
                         f"**Khong the OCR trang {page_num}**\n\n"
