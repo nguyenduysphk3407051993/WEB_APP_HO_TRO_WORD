@@ -5,7 +5,7 @@ import "./index.css";
 
 // ── Gold cursor sparkle (Mệnh Kim) ───────────────────────────────────────────
 
-const GOLD_COLORS = ["#d4a830", "#e8c848", "#f5d870", "#fce99a", "#b89030"];
+const GOLD_COLORS = ["#c29a6e", "#d4b48a", "#e0cdb4", "#ece3d7", "#a07c52"];
 
 function createSparkle(x, y) {
   const el = document.createElement("div");

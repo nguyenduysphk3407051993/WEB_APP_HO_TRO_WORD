@@ -33,7 +33,7 @@ export default function LatexToEquationTab() {
     <div className="space-y-5">
       {/* Input */}
       <div>
-        <label className="block text-sm font-semibold text-[#f0dfa0] mb-2">
+        <label className="block text-sm font-semibold text-[#ece3d7] mb-2">
           Nội dung LaTeX{" "}
           <span className="text-gold-700 font-normal">(có thể chứa văn bản + công thức)</span>
         </label>
@@ -41,7 +41,7 @@ export default function LatexToEquationTab() {
           value={latex}
           onChange={(e) => setLatex(e.target.value)}
           rows={12}
-          className="w-full rounded-xl border border-[#3d3018] bg-[#1f1b0e]/80 p-4 font-mono text-sm text-[#f0dfa0]
+          className="w-full rounded-xl border border-[#43372d] bg-[#261e18]/80 p-4 font-mono text-sm text-[#ece3d7]
             placeholder-gold-800 focus:border-gold-400 focus:outline-none focus:ring-1 focus:ring-gold-400/30 resize-none"
           placeholder="Nhập nội dung LaTeX..."
         />
@@ -87,7 +87,7 @@ export default function LatexToEquationTab() {
       {/* Preview */}
       <div>
         <h4 className="text-sm font-semibold text-gold-600 uppercase tracking-wide mb-2">Preview (rendered)</h4>
-        <div className="rounded-xl border border-[#3d3018] bg-white p-4 min-h-20 text-sm whitespace-pre-wrap">
+        <div className="rounded-xl border border-[#43372d] bg-white p-4 min-h-20 text-sm whitespace-pre-wrap">
           <MathPreview latex={latex} />
         </div>
       </div>

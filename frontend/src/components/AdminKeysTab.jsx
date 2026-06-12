@@ -229,9 +229,9 @@ export default function AdminKeysTab() {
                 d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
           </div>
-          <h2 className="text-lg font-bold text-[#f0dfa0]">Đăng nhập quản trị</h2>
+          <h2 className="text-lg font-bold text-[#ece3d7]">Đăng nhập quản trị</h2>
           <p className="text-sm text-gold-700 mt-1">
-            Nhập mật khẩu <code className="text-gold-400 bg-[#2a2412] px-1 rounded">ADMIN_PASSWORD</code>
+            Nhập mật khẩu <code className="text-gold-400 bg-[#2f2620] px-1 rounded">ADMIN_PASSWORD</code>
           </p>
         </div>
         <input
@@ -239,11 +239,11 @@ export default function AdminKeysTab() {
           value={pw}
           onChange={(e) => setPw(e.target.value)}
           placeholder="Mật khẩu admin"
-          className="w-full rounded-xl border border-[#3d3018] bg-[#1f1b0e] px-4 py-3 text-[#f0dfa0]
+          className="w-full rounded-xl border border-[#43372d] bg-[#261e18] px-4 py-3 text-[#ece3d7]
             placeholder-gold-800 focus:border-gold-400 focus:outline-none focus:ring-1 focus:ring-gold-400/30"
           autoFocus
         />
-        <button className="w-full rounded-xl bg-gold-500 py-2.5 text-sm font-semibold text-[#0c0a05] hover:bg-gold-400 shadow-lg shadow-gold-500/25">
+        <button className="w-full rounded-xl bg-gold-500 py-2.5 text-sm font-semibold text-[#17120e] hover:bg-gold-400 shadow-lg shadow-gold-500/25">
           Đăng nhập
         </button>
         {err && <p className="text-sm text-red-400 text-center">{err}</p>}
@@ -256,12 +256,12 @@ export default function AdminKeysTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-bold text-[#f0dfa0]">Quản lý API Keys</h2>
+          <h2 className="text-base font-bold text-[#ece3d7]">Quản lý API Keys</h2>
           <p className="text-sm text-gold-700">9router + Google Gemini</p>
         </div>
         <button
           onClick={() => { clearAdminPassword(); setAuthed(false); }}
-          className="flex items-center gap-1.5 text-sm text-gold-600 hover:text-[#f0dfa0] rounded-lg border border-[#3d3018] px-3 py-1.5"
+          className="flex items-center gap-1.5 text-sm text-gold-600 hover:text-[#ece3d7] rounded-lg border border-[#43372d] px-3 py-1.5"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -280,24 +280,24 @@ export default function AdminKeysTab() {
             Model OCR đang dùng
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex-1 min-w-40 text-sm font-medium text-[#f0dfa0]">
+            <label className="flex-1 min-w-40 text-sm font-medium text-[#ece3d7]">
               Provider
               <select
                 value={selectedProvider}
                 onChange={(e) => handleProviderChange(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-[#f0dfa0] focus:border-sky-500 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-[#43372d] bg-[#261e18] px-3 py-2 text-[#ece3d7] focus:border-sky-500 focus:outline-none"
               >
                 {(provider.providers || []).map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </label>
-            <label className="flex-1 min-w-52 text-sm font-medium text-[#f0dfa0]">
+            <label className="flex-1 min-w-52 text-sm font-medium text-[#ece3d7]">
               Model
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-[#f0dfa0] focus:border-sky-500 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-[#43372d] bg-[#261e18] px-3 py-2 text-[#ece3d7] focus:border-sky-500 focus:outline-none"
               >
                 {availableModels.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -329,24 +329,24 @@ export default function AdminKeysTab() {
         <div className="space-y-3">
           <p className="text-sm text-gold-700">
             Mỗi key một dòng. Biến môi trường:{" "}
-            <code className="text-gold-400 bg-[#2a2412] px-1 rounded text-xs">NINEROUTER_API_KEY</code>
+            <code className="text-gold-400 bg-[#2f2620] px-1 rounded text-xs">NINEROUTER_API_KEY</code>
           </p>
           <textarea
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
             placeholder={"sk-9router-key-1\nsk-9router-key-2"}
             rows={5}
-            className="w-full rounded-xl border border-[#3d3018] bg-[#171309] p-3 font-mono text-xs text-[#f0dfa0]
+            className="w-full rounded-xl border border-[#43372d] bg-[#211a15] p-3 font-mono text-xs text-[#ece3d7]
               placeholder-gold-800 focus:border-gold-400 focus:outline-none resize-none"
           />
           <div className="flex flex-wrap gap-2">
             <button onClick={handleTest} disabled={testing}
-              className="flex items-center gap-2 rounded-xl bg-[#2a2412] px-4 py-2 text-sm font-semibold text-[#f0dfa0] hover:bg-[#342d18] disabled:opacity-50 border border-[#3d3018]">
+              className="flex items-center gap-2 rounded-xl bg-[#2f2620] px-4 py-2 text-sm font-semibold text-[#ece3d7] hover:bg-[#3d3228] disabled:opacity-50 border border-[#43372d]">
               {testing && <Spinner />}
               {testing ? "Đang kiểm tra..." : "Kiểm tra key"}
             </button>
             <button onClick={handleSaveAll} disabled={saving}
-              className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-[#0c0a05] hover:bg-gold-400 disabled:opacity-50">
+              className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-[#17120e] hover:bg-gold-400 disabled:opacity-50">
               Thay toàn bộ pool
             </button>
             <button onClick={handleAdd} disabled={saving}
@@ -368,19 +368,19 @@ export default function AdminKeysTab() {
         <div className="space-y-3">
           <p className="text-sm text-gold-700">
             Mỗi key một dòng (tối đa 10 key chạy song song). Biến môi trường:{" "}
-            <code className="text-gold-400 bg-[#2a2412] px-1 rounded text-xs">GEMINI_API_KEY</code>
+            <code className="text-gold-400 bg-[#2f2620] px-1 rounded text-xs">GEMINI_API_KEY</code>
           </p>
           <textarea
             value={geminiBulkText}
             onChange={(e) => setGeminiBulkText(e.target.value)}
             placeholder={"AIzaSy...\nAIzaSy..."}
             rows={5}
-            className="w-full rounded-xl border border-[#3d3018] bg-[#171309] p-3 font-mono text-xs text-[#f0dfa0]
+            className="w-full rounded-xl border border-[#43372d] bg-[#211a15] p-3 font-mono text-xs text-[#ece3d7]
               placeholder-gold-800 focus:border-violet-500 focus:outline-none resize-none"
           />
           <div className="flex flex-wrap gap-2">
             <button onClick={handleGeminiTest} disabled={geminiTesting}
-              className="flex items-center gap-2 rounded-xl bg-[#2a2412] px-4 py-2 text-sm font-semibold text-[#f0dfa0] hover:bg-[#342d18] disabled:opacity-50 border border-[#3d3018]">
+              className="flex items-center gap-2 rounded-xl bg-[#2f2620] px-4 py-2 text-sm font-semibold text-[#ece3d7] hover:bg-[#3d3228] disabled:opacity-50 border border-[#43372d]">
               {geminiTesting && <Spinner />}
               {geminiTesting ? "Đang kiểm tra..." : "Kiểm tra key"}
             </button>
@@ -413,9 +413,9 @@ function Section({ title, subtitle, color, children }) {
     violet: "border-violet-500/20 bg-violet-500/5",
   };
   return (
-    <div className={`rounded-xl border p-4 space-y-4 ${borders[color] ?? "border-[#3d3018] bg-[#1f1b0e]/30"}`}>
+    <div className={`rounded-xl border p-4 space-y-4 ${borders[color] ?? "border-[#43372d] bg-[#261e18]/30"}`}>
       <div>
-        <h3 className="font-semibold text-[#f0dfa0]">{title}</h3>
+        <h3 className="font-semibold text-[#ece3d7]">{title}</h3>
         <p className="text-xs text-gold-700 mt-0.5">{subtitle}</p>
       </div>
       {children}
@@ -443,10 +443,10 @@ function KeysTable({ stats, onReset, onRemove }) {
     ) : null;
   }
   return (
-    <div className="overflow-x-auto rounded-xl border border-[#3d3018]">
-      <table className="min-w-full text-sm bg-[#1f1b0e]/60">
+    <div className="overflow-x-auto rounded-xl border border-[#43372d]">
+      <table className="min-w-full text-sm bg-[#261e18]/60">
         <thead>
-          <tr className="border-b border-[#3d3018] bg-[#1f1b0e]">
+          <tr className="border-b border-[#43372d] bg-[#261e18]">
             {["#", "Key", "Trạng thái", "Dùng", "OK", "Lỗi", "Cooldown", ""].map((label) => (
               <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gold-700">
                 {label}
@@ -454,17 +454,17 @@ function KeysTable({ stats, onReset, onRemove }) {
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#3d3018]/50">
+        <tbody className="divide-y divide-[#43372d]/50">
           {stats.keys.map((key) => (
-            <tr key={key.index} className="hover:bg-[#2a2412]/50">
+            <tr key={key.index} className="hover:bg-[#2f2620]/50">
               <td className="px-4 py-3 text-gold-600">{key.index + 1}</td>
-              <td className="px-4 py-3 font-mono text-xs text-[#f0dfa0]">{key.preview}</td>
+              <td className="px-4 py-3 font-mono text-xs text-[#ece3d7]">{key.preview}</td>
               <td className="px-4 py-3">
                 <span className={`rounded-lg border px-2 py-0.5 text-xs font-medium ${STATE_COLORS[key.state]}`} title={key.last_error}>
                   {STATE_LABELS[key.state]}
                 </span>
               </td>
-              <td className="px-4 py-3 text-[#f0dfa0]">{key.used}</td>
+              <td className="px-4 py-3 text-[#ece3d7]">{key.used}</td>
               <td className="px-4 py-3 text-emerald-400">{key.success}</td>
               <td className="px-4 py-3 text-red-400">{key.errors}</td>
               <td className="px-4 py-3 text-gold-600">
@@ -487,8 +487,8 @@ function KeysTable({ stats, onReset, onRemove }) {
 function TestResultsBox({ results }) {
   if (!results) return null;
   return (
-    <div className="rounded-xl border border-[#3d3018] bg-[#171309] p-3 space-y-2">
-      <p className="text-sm font-semibold text-[#f0dfa0]">
+    <div className="rounded-xl border border-[#43372d] bg-[#211a15] p-3 space-y-2">
+      <p className="text-sm font-semibold text-[#ece3d7]">
         {results.ok}/{results.total} key hoạt động
       </p>
       {results.results.map((result, index) => (
@@ -513,9 +513,9 @@ function StatusMsg({ color, children }) {
   return <div className={`rounded-xl border p-3 text-sm ${styles[color]}`}>{children}</div>;
 }
 
-function StatCard({ label, value, color = "text-[#f0dfa0]" }) {
+function StatCard({ label, value, color = "text-[#ece3d7]" }) {
   return (
-    <div className="rounded-xl border border-[#3d3018] bg-[#1f1b0e] p-3">
+    <div className="rounded-xl border border-[#43372d] bg-[#261e18] p-3">
       <div className="text-[10px] uppercase tracking-wider text-gold-700 font-semibold">{label}</div>
       <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
     </div>

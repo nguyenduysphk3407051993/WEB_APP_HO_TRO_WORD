@@ -72,7 +72,7 @@ export default function App() {
   const ActiveComp = activeTab.component;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0c0a05]">
+    <div className="flex h-screen overflow-hidden bg-[#17120e]">
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
@@ -83,14 +83,14 @@ export default function App() {
 
       {/* ===== SIDEBAR ===== */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-[#171309] border-r border-[#2e2610] transform transition-transform duration-300 ease-in-out
+        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-[#211a15] border-r border-[#372d24] transform transition-transform duration-300 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:relative lg:translate-x-0`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-[#2e2610]">
+        <div className="flex items-center justify-between px-5 py-5 border-b border-[#372d24]">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-gold-400 to-gold-200 shadow-lg shadow-gold-400/30">
-              <svg className="w-5 h-5 text-[#0c0a05]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-[#17120e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
@@ -102,7 +102,7 @@ export default function App() {
           </div>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg text-gold-700 hover:text-gold-300 hover:bg-[#2a2412]"
+            className="lg:hidden p-1.5 rounded-lg text-gold-700 hover:text-gold-300 hover:bg-[#2f2620]"
           >
             {Icons.close}
           </button>
@@ -120,7 +120,7 @@ export default function App() {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left group
                 ${active === tab.id
                   ? "bg-gold-400/15 text-gold-300 border border-gold-400/30"
-                  : "text-gold-700 hover:text-gold-200 hover:bg-[#2a2412] border border-transparent"
+                  : "text-gold-700 hover:text-gold-200 hover:bg-[#2f2620] border border-transparent"
                 }`}
             >
               <span className={`shrink-0 ${active === tab.id ? "text-gold-400" : "text-gold-800 group-hover:text-gold-600"}`}>
@@ -138,7 +138,7 @@ export default function App() {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-[#2e2610]">
+        <div className="px-4 py-4 border-t border-[#372d24]">
           <div className="text-[10px] text-gold-900 leading-relaxed">
             FastAPI + React + Tailwind
             <br />
@@ -150,11 +150,11 @@ export default function App() {
       {/* ===== MAIN CONTENT ===== */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center gap-4 px-6 py-4 bg-[#171309]/80 backdrop-blur border-b border-[#2e2610] shrink-0">
+        <header className="flex items-center gap-4 px-6 py-4 bg-[#211a15]/80 backdrop-blur border-b border-[#372d24] shrink-0">
           {/* Mobile menu button */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg text-gold-700 hover:text-gold-300 hover:bg-[#2a2412]"
+            className="lg:hidden p-2 rounded-lg text-gold-700 hover:text-gold-300 hover:bg-[#2f2620]"
           >
             {Icons.menu}
           </button>
@@ -168,7 +168,7 @@ export default function App() {
               {activeTab.icon}
             </span>
             <div>
-              <h1 className="text-base font-semibold text-[#f5e8b0]">{activeTab.label}</h1>
+              <h1 className="text-base font-semibold text-[#f6f1ea]">{activeTab.label}</h1>
               <p className="text-xs text-gold-700">{activeTab.desc}</p>
             </div>
           </div>
@@ -180,9 +180,9 @@ export default function App() {
         </header>
 
         {/* Tab content */}
-        <main className="flex-1 overflow-y-auto p-6 bg-[#0c0a05]">
+        <main className="flex-1 overflow-y-auto p-6 bg-[#17120e]">
           <div className="mx-auto max-w-4xl">
-            <div className="rounded-2xl border border-[#2e2610] bg-[#171309] p-6 shadow-2xl shadow-black/60">
+            <div className="rounded-2xl border border-[#372d24] bg-[#211a15] p-6 shadow-2xl shadow-black/60">
               <ActiveComp />
             </div>
           </div>

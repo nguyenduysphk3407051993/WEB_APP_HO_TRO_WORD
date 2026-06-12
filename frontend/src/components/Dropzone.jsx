@@ -67,7 +67,7 @@ export default function Dropzone({
             ? "border-gold-400 bg-gold-400/10 scale-[1.01]"
             : hasFiles
             ? "border-emerald-500/50 bg-emerald-500/5"
-            : "border-[#3d3018] hover:border-gold-600/60 hover:bg-gold-400/5 bg-[#1f1b0e]/50"
+            : "border-[#43372d] hover:border-gold-600/60 hover:bg-gold-400/5 bg-[#261e18]/50"
           }`}
       >
         {isDragActive && (
@@ -111,14 +111,14 @@ export default function Dropzone({
             <>
               <UploadIcon />
               <div>
-                <p className="text-[#f0dfa0] font-medium text-sm">
+                <p className="text-[#ece3d7] font-medium text-sm">
                   Kéo & thả {multiple ? "file(s)" : "file"} hoặc{" "}
                   <span className="text-gold-400 underline underline-offset-2">click để chọn</span>
                 </p>
                 {allowPaste && (
                   <p className="text-xs text-gold-700 mt-1">
                     Hoặc nhấn{" "}
-                    <kbd className="px-1.5 py-0.5 rounded bg-[#2a2412] text-gold-300 text-[11px] font-mono border border-[#3d3018]">
+                    <kbd className="px-1.5 py-0.5 rounded bg-[#2f2620] text-gold-300 text-[11px] font-mono border border-[#43372d]">
                       Ctrl+V
                     </kbd>{" "}
                     để dán từ clipboard
@@ -153,7 +153,7 @@ export default function Dropzone({
               <button
                 type="button"
                 onClick={() => folderRef.current?.click()}
-                className="flex items-center gap-2 rounded-lg border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2a2412] hover:text-[#f5e8b0] transition"
+                className="flex items-center gap-2 rounded-lg border border-[#43372d] bg-[#261e18] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2f2620] hover:text-[#f6f1ea] transition"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -183,7 +183,7 @@ export default function Dropzone({
                   // fallback: user can just Ctrl+V
                 }
               }}
-              className="flex items-center gap-2 rounded-lg border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2a2412] hover:text-[#f5e8b0] transition"
+              className="flex items-center gap-2 rounded-lg border border-[#43372d] bg-[#261e18] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2f2620] hover:text-[#f6f1ea] transition"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -200,7 +200,7 @@ export default function Dropzone({
 
 function UploadIcon() {
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2a2412] text-gold-600">
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2f2620] text-gold-600">
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
