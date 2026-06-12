@@ -492,11 +492,11 @@ class OCRService:
         )
 
     # Ngưỡng nhận diện hình vẽ thật (đơn vị point, 1pt ≈ 0.353mm)
-    _FIG_MIN_W = 80.0       # hình hẹp hơn → là mảnh công thức/ký hiệu
-    _FIG_MIN_H = 80.0       # hình thấp hơn → là dòng công thức/gạch phân số
-    _FIG_MIN_PATHS = 8      # cluster vector cần đủ nét mới là hình
-    _FIG_MAX_W_RATIO = 0.85  # rộng hơn 85% bề ngang trang → dải/bảng full-width
-    _FIG_MAX_AREA_RATIO = 0.70  # lớn hơn 70% diện tích trang → scan nguyên trang
+    _FIG_MIN_W = 45.0       # hình hẹp hơn → là mảnh công thức/ký hiệu
+    _FIG_MIN_H = 38.0       # thấp hơn → dòng công thức/gạch phân số (công thức ≤ ~35pt)
+    _FIG_MIN_PATHS = 3      # tam giác = 3 đường; cluster ít nét hơn → ký hiệu lẻ
+    _FIG_MAX_W_RATIO = 0.92  # rộng hơn 92% bề ngang trang → dải/bảng full-width
+    _FIG_MAX_AREA_RATIO = 0.75  # lớn hơn 75% diện tích trang → scan nguyên trang
 
     @staticmethod
     def _cluster_rects(rects: list, margin: float = 6.0) -> list:
@@ -537,6 +537,10 @@ class OCRService:
             return False  # dải scan / bảng chiếm gần hết bề ngang
         if rect.width * rect.height > self._FIG_MAX_AREA_RATIO * parea:
             return False  # ảnh scan nguyên trang
+        # Dải ngang thấp & rộng → dòng công thức (căn lồng, phân số nhiều tầng),
+        # không phải hình. Hình vẽ thật thường vuông hoặc cao (h ≥ 60 hoặc w/h ≤ 2).
+        if rect.height < 60 and (rect.width / rect.height) > 2.0:
+            return False
         return True
 
     def extract_pdf_images(
