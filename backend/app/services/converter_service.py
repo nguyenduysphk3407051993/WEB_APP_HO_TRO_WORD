@@ -260,6 +260,7 @@ class ConverterService:
         document = Document(docx_path)
         self._apply_document_geometry(document)
         self._apply_document_font(document)
+        self._demote_heading_styles(document)
         original_paragraphs = list(document.paragraphs)
 
         for paragraph in original_paragraphs:
@@ -333,6 +334,20 @@ class ConverterService:
             for row in table.rows:
                 for cell in row.cells:
                     yield from ConverterService._iter_document_paragraphs(cell)
+
+    def _demote_heading_styles(self, document: Document) -> None:
+        """Hạ mọi paragraph kiểu Heading/Title về Normal.
+
+        Pandoc biến các dòng markdown như `# Câu 1` hay `## Lời giải` thành
+        Heading (font lớn, đậm, vào Navigation Pane). Đề thi không dùng heading
+        nên đưa hết về body để câu hỏi/lời giải là văn bản thường, định dạng
+        màu/đậm do hậu xử lý quyết định.
+        """
+        normal = document.styles["Normal"]
+        for paragraph in self._iter_document_paragraphs(document):
+            name = paragraph.style.name if paragraph.style else ""
+            if name.startswith("Heading") or name in ("Title", "Subtitle"):
+                paragraph.style = normal
 
     # ──────────────────────────────────────────────────────────────
     # Layout A–D answer choices (4-col / 2-col / 1-per-line)
