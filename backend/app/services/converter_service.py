@@ -271,6 +271,7 @@ class ConverterService:
 
         self._layout_answer_choices(document)
         self._split_solution_keyword_paragraphs(document)
+        self._split_solution_content_paragraphs(document)
         self._format_solution_sections(document)
         self._format_tables(document)
         self._format_images(document)
@@ -589,16 +590,78 @@ class ConverterService:
             paragraph._p.remove(run_element)
 
     # ──────────────────────────────────────────────────────────────
-    # Format solution sections (indent/spacing inside Lời giải)
+    # Tách ý nhúng trong 1 đoạn lời giải thành các đoạn riêng
+    # ──────────────────────────────────────────────────────────────
+
+    # Pattern nhận diện ký tự bắt đầu ý mới (chỉ dùng để tách — không ảnh hưởng math)
+    _INLINE_ITEM_SEP_RE = re.compile(
+        r"(?:^|\s{2,}|(?<=[.!?:])[ \t]+)"          # bắt đầu dòng hoặc sau kết thúc câu
+        r"([-*•–]|[+]|=>|⇒|\d{1,2}[.)]|[a-d][.)])" # marker
+        r"(?=\s)",
+        re.MULTILINE,
+    )
+
+    def _split_solution_content_paragraphs(self, document: Document) -> None:
+        """Tách ý nhúng trong cùng 1 paragraph lời giải thành các đoạn riêng."""
+        in_solution = False
+        for paragraph in list(document.paragraphs):
+            text = paragraph.text.strip()
+            if not text:
+                continue
+            if _QUESTION_PREFIX_RE.match(text):
+                in_solution = False
+                continue
+            if _SOLUTION_KEYWORDS_RE.match(text):
+                in_solution = True
+                continue
+            if not in_solution:
+                continue
+
+            # Tìm tất cả marker bắt đầu ý mới bên trong text
+            matches = list(self._INLINE_ITEM_SEP_RE.finditer(text))
+            # Bỏ match ở vị trí 0 (đầu dòng — đây là marker của chính paragraph này)
+            inner = [m for m in matches if m.start() > 0]
+            if not inner:
+                continue
+
+            # Tách text tại vị trí các marker nhúng
+            current_para = paragraph
+            prev_end = 0
+            splits: list[str] = []
+            for m in inner:
+                splits.append(text[prev_end: m.start()].strip())
+                prev_end = m.start()
+            splits.append(text[prev_end:].strip())
+
+            if len(splits) < 2:
+                continue
+
+            # Ghi lại đoạn đầu, chèn các đoạn tiếp theo bên dưới
+            self._clear_paragraph(current_para)
+            current_para.add_run(splits[0])
+            for chunk in reversed(splits[1:]):
+                new_para = self._insert_paragraph_after(current_para, chunk)
+                _ = new_para  # paragraphs sẽ được format bởi _format_solution_sections
+
+    # ──────────────────────────────────────────────────────────────
+    # Format solution sections — phân cấp chính/phụ rõ ràng
     # ──────────────────────────────────────────────────────────────
 
     def _format_solution_sections(self, document: Document) -> None:
         in_solution = False
-        l1_re = re.compile(r"^([-*•–—]|a\)|b\)|c\)|d\)|\d+[.)])\s+(.*)$")
-        l2_re = re.compile(r"^([+])\s+(.*)$")
-        conclusion_re = re.compile(r"^(=>|Chọn|Đáp án:)\s*(.*)$", re.IGNORECASE)
+        # Level 1: dấu đầu dòng chính
+        l1_re = re.compile(
+            r"^([-*•–—]|[a-dA-D][.)]|\d{1,2}[.)])\s+(.+)$", re.DOTALL
+        )
+        # Level 2: dấu phụ
+        l2_re = re.compile(r"^([+>]|\+\+)\s+(.+)$", re.DOTALL)
+        # Kết luận
+        concl_re = re.compile(
+            r"^(=>|⇒|Vậy\b[,:]?|Kết luận\b[,:]?|Chọn\b[,:]?)\s*(.*)$",
+            re.IGNORECASE,
+        )
 
-        for paragraph in document.paragraphs:
+        for paragraph in list(document.paragraphs):
             text = paragraph.text.strip()
             if not text:
                 continue
@@ -611,7 +674,9 @@ class ConverterService:
                 in_solution = True
                 fmt = paragraph.paragraph_format
                 fmt.space_before = Pt(6)
-                fmt.space_after = Pt(3)
+                fmt.space_after = Pt(2)
+                fmt.left_indent = Pt(0)
+                fmt.first_line_indent = Pt(0)
                 fmt.line_spacing = 1.15
                 fmt.keep_with_next = True
                 continue
@@ -620,10 +685,9 @@ class ConverterService:
                 continue
 
             fmt = paragraph.paragraph_format
-            fmt.space_before = Pt(2)
-            fmt.space_after = Pt(2)
             fmt.line_spacing = 1.15
 
+            # Kiểm tra list natively từ pandoc (numPr / List style)
             p_pr = paragraph._p.get_or_add_pPr()
             num_pr = p_pr.find(qn("w:numPr"))
             style_name = paragraph.style.name
@@ -639,38 +703,65 @@ class ConverterService:
                         except ValueError:
                             pass
                 else:
-                    if "2" in style_name or "3" in style_name:
+                    if any(d in style_name for d in ("2", "3", "4")):
                         ilvl = 1
-                if ilvl > 0:
-                    fmt.left_indent = Cm(1.25)
-                    fmt.first_line_indent = Cm(-0.35)
+                if ilvl >= 1:
+                    # L2 phụ
+                    fmt.left_indent = Cm(1.8)
+                    fmt.first_line_indent = Cm(-0.45)
+                    fmt.space_before = Pt(2)
+                    fmt.space_after = Pt(2)
                 else:
-                    fmt.left_indent = Cm(0.75)
-                    fmt.first_line_indent = Cm(-0.35)
+                    # L1 chính
+                    fmt.left_indent = Cm(0.9)
+                    fmt.first_line_indent = Cm(-0.45)
+                    fmt.space_before = Pt(5)
+                    fmt.space_after = Pt(2)
                 continue
 
-            l1_match = l1_re.match(text)
             l2_match = l2_re.match(text)
-            conclusion_match = conclusion_re.match(text)
+            l1_match = l1_re.match(text)
+            concl_match = concl_re.match(text)
 
-            if l1_match:
-                fmt.left_indent = Cm(0.75)
-                fmt.first_line_indent = Cm(-0.35)
+            if l2_match:
+                # L2 phụ — indent sâu hơn L1
+                fmt.left_indent = Cm(1.8)
+                fmt.first_line_indent = Cm(-0.45)
+                fmt.space_before = Pt(2)
+                fmt.space_after = Pt(2)
                 self._reset_tab_stops(paragraph)
-                fmt.tab_stops.add_tab_stop(Cm(0.75), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
-                self._convert_manual_prefix_to_tab(paragraph, l1_match.group(1))
-            elif l2_match:
-                fmt.left_indent = Cm(1.25)
-                fmt.first_line_indent = Cm(-0.35)
-                self._reset_tab_stops(paragraph)
-                fmt.tab_stops.add_tab_stop(Cm(1.25), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
+                fmt.tab_stops.add_tab_stop(Cm(1.8), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
                 self._convert_manual_prefix_to_tab(paragraph, l2_match.group(1))
-            elif conclusion_match:
-                fmt.left_indent = Cm(0.75)
+
+            elif l1_match:
+                # L1 chính — indent vừa, marker in đậm
+                fmt.left_indent = Cm(0.9)
+                fmt.first_line_indent = Cm(-0.45)
+                fmt.space_before = Pt(5)
+                fmt.space_after = Pt(2)
+                self._reset_tab_stops(paragraph)
+                fmt.tab_stops.add_tab_stop(Cm(0.9), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
+                self._convert_manual_prefix_to_tab(paragraph, l1_match.group(1))
+                # Bold marker run đầu tiên
+                if paragraph.runs:
+                    paragraph.runs[0].bold = True
+
+            elif concl_match:
+                # Kết luận — tách biệt rõ, in đậm nghiêng
+                fmt.left_indent = Cm(0.5)
                 fmt.first_line_indent = Pt(0)
+                fmt.space_before = Pt(7)
+                fmt.space_after = Pt(3)
+                for run in paragraph.runs:
+                    run.bold = True
+                    run.italic = True
+
             else:
-                fmt.left_indent = Cm(0.75)
+                # Văn xuôi thông thường trong lời giải
+                fmt.left_indent = Cm(0.5)
                 fmt.first_line_indent = Pt(0)
+                fmt.space_before = Pt(3)
+                fmt.space_after = Pt(2)
 
     @staticmethod
     def _convert_manual_prefix_to_tab(paragraph: Paragraph, prefix: str) -> None:
