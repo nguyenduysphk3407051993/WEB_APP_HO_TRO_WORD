@@ -55,6 +55,81 @@ export const ocrPdfToDocx = async (
   return data;
 };
 
+export const ocrImageToText = async (file, mode = "page") => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("mode", mode);
+  const { data } = await api.post("/ocr/image-to-text", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrPdfToText = async (
+  file,
+  { dpi = 200, mode = "page", maxConcurrent = 10 } = {}
+) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dpi", dpi);
+  fd.append("mode", mode);
+  fd.append("max_concurrent", maxConcurrent);
+  const { data } = await api.post("/ocr/pdf-to-text", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrImageToExamLatex = async (file, mode = "page") => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("mode", mode);
+  const { data } = await api.post("/ocr/image-to-exam-latex", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrPdfToExamLatex = async (
+  file,
+  { dpi = 200, mode = "page", maxConcurrent = 10 } = {}
+) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dpi", dpi);
+  fd.append("mode", mode);
+  fd.append("max_concurrent", maxConcurrent);
+  const { data } = await api.post("/ocr/pdf-to-exam-latex", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrImageToEquation = async (file, mode = "page") => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("mode", mode);
+  const { data } = await api.post("/ocr/image-to-equation", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+export const ocrPdfToEquation = async (
+  file,
+  { dpi = 200, mode = "page", maxConcurrent = 10 } = {}
+) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dpi", dpi);
+  fd.append("mode", mode);
+  fd.append("max_concurrent", maxConcurrent);
+  const { data } = await api.post("/ocr/pdf-to-equation", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
 export const downloadOcrDocx = async (downloadUrl) => {
   const response = await axios.get(downloadUrl, {
     responseType: "blob",

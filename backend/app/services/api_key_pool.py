@@ -1,4 +1,4 @@
-"""Pool quản lý nhiều API key Gemini với failover, persist file, hot-reload."""
+"""Pool quản lý nhiều API key với failover, persistence và hot-reload."""
 from __future__ import annotations
 
 import asyncio
@@ -43,8 +43,8 @@ class ApiKey:
         return max(0.0, self.cooldown_until - time.time())
 
 
-class GeminiKeyPool:
-    """Pool có persistence và hot-reload."""
+class ApiKeyPool:
+    """Pool API key dùng chung cho các provider HTTP."""
 
     def __init__(
         self,
@@ -217,37 +217,31 @@ class GeminiKeyPool:
         }
 
 
-_pool: Optional[GeminiKeyPool] = None
+_pool: Optional[ApiKeyPool] = None
+_gemini_pool: Optional[ApiKeyPool] = None
 
 
 def init_pool(keys: list[str], max_concurrent_per_key: int = 3,
-              persist_path: Optional[Path] = None) -> GeminiKeyPool:
+              persist_path: Optional[Path] = None) -> ApiKeyPool:
     global _pool
-    _pool = GeminiKeyPool(keys, max_concurrent_per_key, persist_path)
+    _pool = ApiKeyPool(keys, max_concurrent_per_key, persist_path)
     return _pool
 
 
-def get_pool() -> GeminiKeyPool:
+def get_pool() -> ApiKeyPool:
     if _pool is None:
         raise RuntimeError("Pool chưa init.")
     return _pool
 
 
-async def test_single_key(key: str, model: str, timeout: float = 30.0) -> dict:
-    """Gọi thử Gemini với 1 key để verify. Trả về {ok, message}."""
-    from google import genai
-    try:
-        client = genai.Client(api_key=key.strip())
-        resp = await asyncio.wait_for(
-            client.aio.models.generate_content(
-                model=model,
-                contents=["Reply with only the word: OK"],
-            ),
-            timeout=timeout,
-        )
-        text = (resp.text or "").strip()
-        return {"ok": True, "message": f"Gemini phản hồi: {text[:50]}"}
-    except asyncio.TimeoutError:
-        return {"ok": False, "message": "Timeout"}
-    except Exception as exc:
-        return {"ok": False, "message": str(exc)[:200]}
+def init_gemini_pool(keys: list[str], max_concurrent_per_key: int = 10,
+                     persist_path: Optional[Path] = None) -> ApiKeyPool:
+    global _gemini_pool
+    _gemini_pool = ApiKeyPool(keys, max_concurrent_per_key, persist_path)
+    return _gemini_pool
+
+
+def get_gemini_pool() -> ApiKeyPool:
+    if _gemini_pool is None:
+        raise RuntimeError("Gemini pool chưa init.")
+    return _gemini_pool

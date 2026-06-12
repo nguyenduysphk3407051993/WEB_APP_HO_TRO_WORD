@@ -1,4 +1,4 @@
-"""FastAPI entry cho web app chuyen doi tai lieu voi Gemini API pool."""
+"""FastAPI entry cho web app chuyển đổi tài liệu với 9router."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import admin, convert, ocr
-from app.services.gemini_pool import GeminiKeyPool, init_pool
+from app.services.api_key_pool import ApiKeyPool, get_pool, init_pool, init_gemini_pool
+from app.services.ninerouter_client import provider_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,24 +21,35 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    keys_from_file = GeminiKeyPool.load_keys_from_file(settings.KEYS_FILE)
-    keys = keys_from_file or settings.gemini_keys_list
+    # 9router pool
+    keys_from_file = ApiKeyPool.load_keys_from_file(settings.KEYS_FILE)
+    keys = keys_from_file or settings.ninerouter_keys_list
     source = "file" if keys_from_file else ("env" if keys else "none")
-
     init_pool(
         keys,
-        max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY,
+        max_concurrent_per_key=settings.NINEROUTER_MAX_CONCURRENT_PER_KEY,
         persist_path=settings.KEYS_FILE,
     )
     if keys:
-        logger.info(
-            "Pool san sang: %d key tu %s (model=%s).",
-            len(keys),
-            source,
-            settings.GEMINI_MODEL,
-        )
+        logger.info("9router pool san sang: %d key tu %s.", len(keys), source)
     else:
-        logger.warning("Pool rong - vao /admin tren web de them key.")
+        logger.warning("9router pool rong - vao /admin de them key.")
+
+    # Gemini pool
+    gemini_keys_from_file = ApiKeyPool.load_keys_from_file(settings.GEMINI_KEYS_FILE)
+    gemini_keys = gemini_keys_from_file or settings.gemini_keys_list
+    gemini_source = "file" if gemini_keys_from_file else ("env" if gemini_keys else "none")
+    init_gemini_pool(
+        gemini_keys,
+        max_concurrent_per_key=settings.GEMINI_MAX_CONCURRENT_PER_KEY,
+        persist_path=settings.GEMINI_KEYS_FILE,
+    )
+    if gemini_keys:
+        logger.info("Gemini pool san sang: %d key tu %s.", len(gemini_keys), gemini_source)
+    else:
+        logger.warning("Gemini pool rong - vao /admin de them key.")
+
+    logger.info("Provider hien tai: %s / model: %s", provider_config.provider, provider_config.model)
 
     if not settings.ADMIN_PASSWORD:
         logger.warning("ADMIN_PASSWORD chua set - trang quan ly key se bi khoa.")
@@ -65,11 +77,15 @@ app.include_router(admin.router)
 
 @app.get("/api/health", tags=["Meta"])
 def health() -> dict:
+    from app.services.api_key_pool import get_gemini_pool
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "gemini_keys": len(settings.gemini_keys_list),
+        "provider": provider_config.provider,
+        "model": provider_config.model,
+        "ninerouter_keys": get_pool().stats()["total"],
+        "gemini_keys": get_gemini_pool().stats()["total"],
     }
 
 

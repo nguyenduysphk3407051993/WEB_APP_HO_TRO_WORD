@@ -4,13 +4,12 @@ python-multipart==0.0.9
 pydantic==2.9.2
 pydantic-settings==2.5.2
 
-# Gemini API (Google AI Studio) — OCR công thức + xử lý đa định dạng
-google-genai==0.3.0
-
 # Xử lý ảnh và PDF
 Pillow==10.4.0
 PyMuPDF==1.24.10
 pdf2image==1.17.0
+numpy==1.26.4
+scipy==1.13.1
 
 # Xử lý DOCX và chuyển đổi
 python-docx==1.1.2

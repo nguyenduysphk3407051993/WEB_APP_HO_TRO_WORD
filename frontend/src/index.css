@@ -1,18 +1,145 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   font-family: "Inter", system-ui, sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  background: #17120e;
+  color: #f6f1ea;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  cursor: none;
+}
+
+input, textarea, select {
+  cursor: text;
 }
 
 textarea, code, pre {
-  font-family: "JetBrains Mono", monospace;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* Scrollbar — gold tinted */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #52453a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #6e5d4c; }
+
+/* Smooth transitions (excludes position props so cursor is unaffected) */
+* {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(23, 19, 9, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(194, 154, 110, 0.15);
+}
+
+/* Gold gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #c29a6e 0%, #e0cdb4 50%, #c29a6e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gold glow */
+.glow-gold {
+  box-shadow: 0 0 20px rgba(194, 154, 110, 0.35);
+}
+
+/* Sidebar active item */
+.sidebar-item-active {
+  background: linear-gradient(135deg, rgba(194, 154, 110, 0.18), rgba(224, 205, 180, 0.05));
+  border-left: 3px solid #c29a6e;
+}
+
+/* Focus ring — gold */
+*:focus-visible {
+  outline: 2px solid #c29a6e;
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════
+   CUSTOM CURSOR — Gold sparkle
+═══════════════════════════════════════════ */
+
+#cursor-dot {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  background: #c29a6e;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  left: -20px;
+  top: -20px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px #c29a6e, 0 0 16px rgba(194, 154, 110, 0.4);
+  transition: width 0.15s ease, height 0.15s ease,
+              background 0.15s ease, box-shadow 0.15s ease;
+  will-change: left, top;
+}
+
+#cursor-ring {
+  position: fixed;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid rgba(194, 154, 110, 0.55);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9998;
+  left: -40px;
+  top: -40px;
+  transform: translate(-50%, -50%);
+  transition: width 0.25s ease, height 0.25s ease, border-color 0.2s ease;
+  will-change: left, top;
+}
+
+body.cursor-hover #cursor-dot {
+  width: 12px;
+  height: 12px;
+  background: #d4b48a;
+  box-shadow: 0 0 12px #d4b48a, 0 0 24px rgba(212, 180, 138, 0.55);
+}
+
+body.cursor-hover #cursor-ring {
+  width: 42px;
+  height: 42px;
+  border-color: rgba(212, 180, 138, 0.9);
+}
+
+body.cursor-text-field #cursor-dot,
+body.cursor-text-field #cursor-ring {
+  opacity: 0;
+}
+
+@keyframes sparkle-out {
+  0%   { opacity: 1;   transform: translate(-50%, -50%) scale(1)   rotate(0deg); }
+  100% { opacity: 0;   transform: translate(-50%, -50%) scale(0.1) rotate(200deg); }
+}
+
+.cursor-sparkle {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9997;
+  animation: sparkle-out 0.55s ease-out forwards;
+  transform-origin: center;
+}
+
+/* Hide cursor effect on touch devices */
+@media (hover: none) {
+  body { cursor: auto; }
+  input, textarea, select { cursor: text; }
+  #cursor-dot, #cursor-ring { display: none; }
 }

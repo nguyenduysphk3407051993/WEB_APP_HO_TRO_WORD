@@ -30,41 +30,64 @@ export default function LatexToEquationTab() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Input */}
       <div>
-        <label className="block text-sm font-semibold text-slate-700 mb-2">
-          Nội dung LaTeX (có thể chứa văn bản + công thức)
+        <label className="block text-sm font-semibold text-[#ece3d7] mb-2">
+          Nội dung LaTeX{" "}
+          <span className="text-gold-700 font-normal">(có thể chứa văn bản + công thức)</span>
         </label>
         <textarea
           value={latex}
           onChange={(e) => setLatex(e.target.value)}
-          rows={10}
-          className="w-full p-3 border border-slate-300 rounded-md font-mono text-sm focus:ring-2 focus:ring-indigo-500"
+          rows={12}
+          className="w-full rounded-xl border border-[#43372d] bg-[#261e18]/80 p-4 font-mono text-sm text-[#ece3d7]
+            placeholder-gold-800 focus:border-gold-400 focus:outline-none focus:ring-1 focus:ring-gold-400/30 resize-none"
+          placeholder="Nhập nội dung LaTeX..."
         />
       </div>
 
-      <div className="flex gap-3 items-center">
+      {/* Action */}
+      <div className="flex flex-wrap items-center gap-4">
         <button
           onClick={handleDownload}
           disabled={loading || !latex.trim()}
-          className="px-5 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white
+            hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/25"
         >
-          {loading ? "Đang tạo..." : "Tải về .docx (Word Equation)"}
+          {loading ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Đang tạo...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Tải về .docx
+            </>
+          )}
         </button>
-        <span className="text-sm text-slate-500">
-          File .docx mở trong Word, công thức là OMML native (chỉnh sửa được bằng Equation Editor).
-        </span>
+        <p className="text-sm text-gold-700">
+          File .docx mở trong Word, công thức là OMML native (Equation Editor).
+        </p>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {error}
+        <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
+          <svg className="w-4 h-4 mt-0.5 shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-red-300">{error}</p>
         </div>
       )}
 
+      {/* Preview */}
       <div>
-        <h4 className="text-sm font-semibold text-slate-700 mb-2">Preview (rendered)</h4>
-        <div className="bg-white p-4 border rounded-md text-sm whitespace-pre-wrap">
+        <h4 className="text-sm font-semibold text-gold-600 uppercase tracking-wide mb-2">Preview (rendered)</h4>
+        <div className="rounded-xl border border-[#43372d] bg-white p-4 min-h-20 text-sm whitespace-pre-wrap">
           <MathPreview latex={latex} />
         </div>
       </div>

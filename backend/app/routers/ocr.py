@@ -234,6 +234,50 @@ async def ocr_pdf(
     }
 
 
+@router.post("/image-to-text")
+async def ocr_image_to_text(
+    file: UploadFile = File(...),
+    mode: str = Form("page", description='"single" = 1 cong thuc, "page" = ca trang'),
+) -> dict:
+    """OCR anh thanh van ban thuan: Cau/Bai N cung dong, A-D xuong dong, cong thuc $...$."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_IMAGE_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        text = await ocr_service.image_to_text(content, mode=mode)
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR: {exc}") from exc
+    return {"text": text, "mode": mode}
+
+
+@router.post("/pdf-to-text")
+async def ocr_pdf_to_text(
+    file: UploadFile = File(...),
+    dpi: int = Form(200),
+    mode: str = Form("page"),
+    max_concurrent: int = Form(10, description="So trang xu ly song song"),
+) -> dict:
+    """OCR PDF thanh van ban thuan theo tung trang."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_PDF_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        results = await ocr_service.pdf_to_text_pages(
+            content, dpi=dpi, mode=mode, max_concurrent_pages=max_concurrent
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR PDF: {exc}") from exc
+    return {
+        "pages": results,
+        "total": len(results),
+        "errors": sum(1 for item in results if item.get("error")),
+    }
+
+
 @router.post("/pdf-to-docx")
 async def ocr_pdf_to_docx(
     file: UploadFile = File(...),
@@ -248,19 +292,136 @@ async def ocr_pdf_to_docx(
         raise HTTPException(413, "File qua lon.")
 
     out = new_output_path(".docx")
+    images_dir = out.parent / "images"
     download_name = _build_download_name(file.filename, "pdf-to-word")
     try:
+        extracted_images = ocr_service.extract_pdf_images(content, images_dir)
         pages_data = await ocr_service.pdf_to_markdown_pages(
             content,
             dpi=dpi,
             mode=mode,
             max_concurrent_pages=max_concurrent,
         )
-        markdown = ocr_service.combine_markdown_pages(pages_data)
-        converter_service.markdown_to_toggle_tex_docx(markdown, out)
+        markdown = ocr_service.combine_markdown_pages(pages_data, extracted_images)
+        converter_service.markdown_to_toggle_tex_docx(markdown, out, resource_path=out.parent)
         formulas, pages = _build_formula_catalog(pages_data, "markdown")
     except Exception as exc:
         raise HTTPException(500, f"Loi tao Word tu PDF: {exc}") from exc
+
+    return _build_docx_payload(
+        source_type="pdf",
+        mode=mode,
+        output_path=out,
+        filename=download_name,
+        formulas=formulas,
+        pages=pages,
+    )
+
+
+@router.post("/image-to-exam-latex")
+async def ocr_image_to_exam_latex(
+    file: UploadFile = File(...),
+    mode: str = Form("page", description='"single" = 1 cau, "page" = ca trang'),
+) -> dict:
+    """OCR anh thanh LaTeX thi cu: \\begin{ex}...\\choice...\\end{ex}."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_IMAGE_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        latex = await ocr_service.image_to_exam_latex(content, mode=mode)
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR: {exc}") from exc
+    return {"latex": latex, "mode": mode}
+
+
+@router.post("/pdf-to-exam-latex")
+async def ocr_pdf_to_exam_latex(
+    file: UploadFile = File(...),
+    dpi: int = Form(200),
+    mode: str = Form("page"),
+    max_concurrent: int = Form(10, description="So trang xu ly song song"),
+) -> dict:
+    """OCR PDF thanh LaTeX thi cu theo tung trang."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_PDF_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+    try:
+        results = await ocr_service.pdf_to_exam_latex_pages(
+            content, dpi=dpi, mode=mode, max_concurrent_pages=max_concurrent
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Loi OCR PDF: {exc}") from exc
+    return {
+        "pages": results,
+        "total": len(results),
+        "errors": sum(1 for item in results if item.get("error")),
+    }
+
+
+@router.post("/image-to-equation")
+async def ocr_image_to_equation(
+    file: UploadFile = File(...),
+    mode: str = Form("page", description='"single" = 1 cong thuc, "page" = ca trang'),
+) -> dict:
+    """OCR anh thanh Word voi cong thuc OMML (equation thuc su, khong phai Toggle TeX)."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_IMAGE_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+
+    out = new_output_path(".docx")
+    download_name = _build_download_name(file.filename, "image-to-equation")
+    try:
+        markdown = await ocr_service.image_to_markdown(content, mode=mode)
+        converter_service.markdown_to_docx(markdown, out)
+        formulas, pages = _build_formula_catalog(
+            [{"page": 1, "markdown": markdown, "error": None}], "markdown"
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Loi tao Word Equation tu anh: {exc}") from exc
+
+    return _build_docx_payload(
+        source_type="image",
+        mode=mode,
+        output_path=out,
+        filename=download_name,
+        formulas=formulas,
+        pages=pages,
+    )
+
+
+@router.post("/pdf-to-equation")
+async def ocr_pdf_to_equation(
+    file: UploadFile = File(...),
+    dpi: int = Form(200),
+    mode: str = Form("page"),
+    max_concurrent: int = Form(10, description="So trang xu ly song song"),
+) -> dict:
+    """OCR PDF thanh Word voi cong thuc OMML (equation thuc su, khong phai Toggle TeX)."""
+    mode = _validate_mode(mode)
+    validate_extension(file.filename or "", settings.ALLOWED_PDF_EXTENSIONS)
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, "File qua lon.")
+
+    out = new_output_path(".docx")
+    images_dir = out.parent / "images"
+    download_name = _build_download_name(file.filename, "pdf-to-equation")
+    try:
+        extracted_images = ocr_service.extract_pdf_images(content, images_dir)
+        pages_data = await ocr_service.pdf_to_markdown_pages(
+            content, dpi=dpi, mode=mode, max_concurrent_pages=max_concurrent
+        )
+        markdown = ocr_service.combine_markdown_pages(pages_data, extracted_images)
+        converter_service.markdown_to_docx(markdown, out, resource_path=out.parent)
+        formulas, pages = _build_formula_catalog(pages_data, "markdown")
+    except Exception as exc:
+        raise HTTPException(500, f"Loi tao Word Equation tu PDF: {exc}") from exc
 
     return _build_docx_payload(
         source_type="pdf",

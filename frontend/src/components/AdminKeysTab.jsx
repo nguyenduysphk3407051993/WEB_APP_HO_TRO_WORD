@@ -1,349 +1,523 @@
 import { useEffect, useState } from "react";
 import {
+  addGeminiKey,
   addKey,
   authCheck,
   clearAdminPassword,
+  fetchGeminiStats,
+  fetchProvider,
   fetchStats,
   getAdminPassword,
+  removeGeminiKey,
   removeKey,
+  replaceGeminiKeys,
   replaceKeys,
+  resetGeminiKey,
   resetKey,
   setAdminPassword,
+  testGeminiKeys,
   testKeys,
+  updateProvider,
 } from "../admin";
 
 const STATE_COLORS = {
-  active: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  rate_limited: "bg-amber-100 text-amber-800 border-amber-300",
-  quota_exceeded: "bg-orange-100 text-orange-800 border-orange-300",
-  invalid: "bg-red-100 text-red-800 border-red-300",
+  active:         "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  rate_limited:   "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  quota_exceeded: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  invalid:        "bg-red-500/20 text-red-400 border-red-500/30",
 };
 
 const STATE_LABELS = {
-  active: "Sẵn sàng",
-  rate_limited: "Cooldown phút",
-  quota_exceeded: "Hết quota ngày",
-  invalid: "Key không hợp lệ",
+  active:         "Sẵn sàng",
+  rate_limited:   "Rate limit",
+  quota_exceeded: "Hết quota",
+  invalid:        "Không hợp lệ",
 };
 
 export default function AdminKeysTab() {
   const [authed, setAuthed] = useState(false);
   const [pw, setPw] = useState("");
+
+  const [provider, setProvider] = useState(null);
+  const [selectedProvider, setSelectedProvider] = useState("9router");
+  const [selectedModel, setSelectedModel] = useState("");
+
   const [stats, setStats] = useState(null);
-  const [err, setErr] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState(null);
+
+  const [geminiStats, setGeminiStats] = useState(null);
+  const [geminiBulkText, setGeminiBulkText] = useState("");
+  const [geminiTesting, setGeminiTesting] = useState(false);
+  const [geminiTestResults, setGeminiTestResults] = useState(null);
+
+  const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Auto auth nếu sessionStorage còn password
   useEffect(() => {
     const stored = getAdminPassword();
-    if (stored) {
-      authCheck()
-        .then(() => setAuthed(true))
-        .catch(() => clearAdminPassword());
-    }
+    if (!stored) return;
+    authCheck()
+      .then(() => setAuthed(true))
+      .catch(() => clearAdminPassword());
   }, []);
 
-  // Refresh stats định kỳ khi đã auth
   useEffect(() => {
     if (!authed) return;
-    const load = () =>
-      fetchStats()
-        .then(setStats)
-        .catch((e) => {
-          if (e.response?.status === 401) {
-            clearAdminPassword();
-            setAuthed(false);
-          } else {
-            setErr(e.response?.data?.detail || e.message);
-          }
-        });
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+
+    const handleError = (error) => {
+      if (error.response?.status === 401) {
+        clearAdminPassword();
+        setAuthed(false);
+      } else {
+        setErr(error.response?.data?.detail || error.message);
+      }
+    };
+
+    const loadAll = () => {
+      fetchStats().then(setStats).catch(handleError);
+      fetchGeminiStats().then(setGeminiStats).catch(handleError);
+    };
+
+    loadAll();
+    fetchProvider()
+      .then((data) => {
+        setProvider(data);
+        setSelectedProvider(data.provider || "9router");
+        setSelectedModel(data.model);
+      })
+      .catch(handleError);
+
+    const timer = setInterval(loadAll, 5000);
+    return () => clearInterval(timer);
   }, [authed]);
 
+  const handleProviderChange = (newProvider) => {
+    setSelectedProvider(newProvider);
+    if (provider?.providers) {
+      const p = provider.providers.find((x) => x.id === newProvider);
+      if (p?.models?.length) setSelectedModel(p.models[0].id);
+    }
+  };
+
+  const availableModels = provider?.providers?.find((p) => p.id === selectedProvider)?.models || [];
+
+  const parseBulk = (text) =>
+    text.split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
+
   const handleLogin = async (e) => {
-    e?.preventDefault();
+    e.preventDefault();
     setErr("");
     setAdminPassword(pw);
     try {
       await authCheck();
       setAuthed(true);
-    } catch (e) {
+    } catch (error) {
       clearAdminPassword();
-      setErr(e.response?.data?.detail || "Sai mật khẩu.");
+      setErr(error.response?.data?.detail || "Sai mật khẩu.");
     }
   };
 
-  const handleLogout = () => {
-    clearAdminPassword();
-    setAuthed(false);
-    setPw("");
-    setStats(null);
+  const handleProviderSave = async () => {
+    setSaving(true); setErr(""); setNotice("");
+    try {
+      const data = await updateProvider(selectedProvider, selectedModel);
+      setProvider(data);
+      setNotice(`Đã chuyển sang ${selectedProvider} / ${selectedModel}.`);
+    } catch (error) {
+      setErr(error.response?.data?.detail || error.message);
+    } finally { setSaving(false); }
   };
-
-  const parseBulk = () =>
-    bulkText
-      .split(/[\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
 
   const handleTest = async () => {
-    setErr("");
-    setTestResults(null);
-    const keys = parseBulk();
-    if (!keys.length) {
-      setErr("Hãy paste ít nhất 1 key vào ô bên trên.");
-      return;
-    }
-    setTesting(true);
-    try {
-      const res = await testKeys(keys);
-      setTestResults(res);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    } finally {
-      setTesting(false);
-    }
+    const keys = parseBulk(bulkText);
+    if (!keys.length) { setErr("Hãy nhập ít nhất một API key."); return; }
+    setTesting(true); setErr(""); setTestResults(null);
+    try { setTestResults(await testKeys(keys)); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setTesting(false); }
   };
 
   const handleSaveAll = async () => {
-    setErr("");
-    const keys = parseBulk();
-    if (!keys.length) {
-      setErr("Cần ít nhất 1 key.");
-      return;
-    }
-    if (!confirm(`Thay toàn bộ pool bằng ${keys.length} key này? (Pool cũ sẽ bị xoá)`)) return;
-    setSaving(true);
+    const keys = parseBulk(bulkText);
+    if (!keys.length) { setErr("Cần ít nhất một API key."); return; }
+    if (!confirm(`Thay toàn bộ pool 9router bằng ${keys.length} key này?`)) return;
+    setSaving(true); setErr("");
     try {
       await replaceKeys(keys);
-      setBulkText("");
-      setTestResults(null);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    } finally {
-      setSaving(false);
-    }
+      setBulkText(""); setTestResults(null);
+      setStats(await fetchStats());
+    } catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setSaving(false); }
   };
 
   const handleAdd = async () => {
-    setErr("");
-    const keys = parseBulk();
-    if (keys.length !== 1) {
-      setErr("Để thêm 1 key, ô textarea chỉ chứa 1 key.");
-      return;
-    }
-    setSaving(true);
+    const keys = parseBulk(bulkText);
+    if (keys.length !== 1) { setErr("Để thêm một key, ô nhập chỉ được chứa đúng một key."); return; }
+    setSaving(true); setErr("");
     try {
       await addKey(keys[0]);
-      setBulkText("");
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    } finally {
-      setSaving(false);
-    }
+      setBulkText(""); setStats(await fetchStats());
+    } catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setSaving(false); }
   };
 
   const handleRemove = async (index) => {
-    if (!confirm(`Xoá key #${index + 1}?`)) return;
-    try {
-      await removeKey(index);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    }
+    if (!confirm(`Xóa key 9router #${index + 1}?`)) return;
+    try { await removeKey(index); setStats(await fetchStats()); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
   };
 
-  const handleResetKey = async (index) => {
+  const handleReset = async (index) => {
+    try { await resetKey(index); setStats(await fetchStats()); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
+  };
+
+  const handleGeminiTest = async () => {
+    const keys = parseBulk(geminiBulkText);
+    if (!keys.length) { setErr("Hãy nhập ít nhất một Gemini API key."); return; }
+    setGeminiTesting(true); setErr(""); setGeminiTestResults(null);
+    try { setGeminiTestResults(await testGeminiKeys(keys)); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setGeminiTesting(false); }
+  };
+
+  const handleGeminiSaveAll = async () => {
+    const keys = parseBulk(geminiBulkText);
+    if (!keys.length) { setErr("Cần ít nhất một Gemini API key."); return; }
+    if (!confirm(`Thay toàn bộ Gemini pool bằng ${keys.length} key này?`)) return;
+    setSaving(true); setErr("");
     try {
-      await resetKey(index);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    }
+      await replaceGeminiKeys(keys);
+      setGeminiBulkText(""); setGeminiTestResults(null);
+      setGeminiStats(await fetchGeminiStats());
+    } catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleGeminiAdd = async () => {
+    const keys = parseBulk(geminiBulkText);
+    if (keys.length !== 1) { setErr("Để thêm một key, ô nhập chỉ được chứa đúng một key."); return; }
+    setSaving(true); setErr("");
+    try {
+      await addGeminiKey(keys[0]);
+      setGeminiBulkText(""); setGeminiStats(await fetchGeminiStats());
+    } catch (error) { setErr(error.response?.data?.detail || error.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleGeminiRemove = async (index) => {
+    if (!confirm(`Xóa Gemini key #${index + 1}?`)) return;
+    try { await removeGeminiKey(index); setGeminiStats(await fetchGeminiStats()); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
+  };
+
+  const handleGeminiReset = async (index) => {
+    try { await resetGeminiKey(index); setGeminiStats(await fetchGeminiStats()); }
+    catch (error) { setErr(error.response?.data?.detail || error.message); }
   };
 
   if (!authed) {
     return (
-      <form onSubmit={handleLogin} className="max-w-md mx-auto space-y-4">
-        <h2 className="text-lg font-semibold">Mật khẩu Admin</h2>
-        <p className="text-sm text-slate-600">
-          Cần mật khẩu để xem/sửa danh sách API keys. Mật khẩu này đặt qua biến môi
-          trường <code className="bg-slate-100 px-1 rounded">ADMIN_PASSWORD</code> trong file <code>.env</code>.
-        </p>
+      <form onSubmit={handleLogin} className="mx-auto max-w-sm space-y-4">
+        <div className="text-center mb-6">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gold-400/15 text-gold-400 mb-3">
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-[#ece3d7]">Đăng nhập quản trị</h2>
+          <p className="text-sm text-gold-700 mt-1">
+            Nhập mật khẩu <code className="text-gold-400 bg-[#2f2620] px-1 rounded">ADMIN_PASSWORD</code>
+          </p>
+        </div>
         <input
           type="password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
           placeholder="Mật khẩu admin"
-          className="w-full border border-slate-300 rounded px-3 py-2"
+          className="w-full rounded-xl border border-[#43372d] bg-[#261e18] px-4 py-3 text-[#ece3d7]
+            placeholder-gold-800 focus:border-gold-400 focus:outline-none focus:ring-1 focus:ring-gold-400/30"
           autoFocus
         />
-        <button
-          type="submit"
-          className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700"
-        >
+        <button className="w-full rounded-xl bg-gold-500 py-2.5 text-sm font-semibold text-[#17120e] hover:bg-gold-400 shadow-lg shadow-gold-500/25">
           Đăng nhập
         </button>
-        {err && <p className="text-red-600 text-sm">{err}</p>}
+        {err && <p className="text-sm text-red-400 text-center">{err}</p>}
       </form>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-semibold">Quản lý Gemini API Keys</h2>
-        <button onClick={handleLogout} className="text-sm text-slate-600 hover:text-slate-900 underline">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-[#ece3d7]">Quản lý API Keys</h2>
+          <p className="text-sm text-gold-700">9router + Google Gemini</p>
+        </div>
+        <button
+          onClick={() => { clearAdminPassword(); setAuthed(false); }}
+          className="flex items-center gap-1.5 text-sm text-gold-600 hover:text-[#ece3d7] rounded-lg border border-[#43372d] px-3 py-1.5"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
           Đăng xuất
         </button>
       </div>
 
-      {err && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-          {err}
-        </div>
-      )}
+      {err    && <StatusMsg color="red">{err}</StatusMsg>}
+      {notice && <StatusMsg color="emerald">{notice}</StatusMsg>}
 
-      {/* Stats summary */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <Stat label="Tổng key" value={stats.total} />
-          <Stat label="Sẵn sàng" value={stats.active} color="text-emerald-700" />
-          <Stat label="Cooldown phút" value={stats.rate_limited} color="text-amber-700" />
-          <Stat label="Hết quota ngày" value={stats.quota_exceeded} color="text-orange-700" />
-          <Stat label="Key chết" value={stats.invalid} color="text-red-700" />
-        </div>
-      )}
-
-      {/* Bulk paste */}
-      <div className="bg-white border border-slate-200 rounded p-4 space-y-3">
-        <h3 className="font-semibold text-slate-800">Paste API keys</h3>
-        <p className="text-sm text-slate-600">
-          Mỗi key trên 1 dòng, hoặc phân cách bằng dấu phẩy. Hỗ trợ paste nhiều key một lúc.
-        </p>
-        <textarea
-          value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-          placeholder={"AIzaSy_KEY_1\nAIzaSy_KEY_2\nAIzaSy_KEY_3\n..."}
-          rows={8}
-          className="w-full p-3 border border-slate-300 rounded font-mono text-xs"
-        />
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={handleTest}
-            disabled={testing}
-            className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 disabled:opacity-50 text-sm"
-          >
-            {testing ? "Đang test..." : "Test keys (không lưu)"}
-          </button>
-          <button
-            onClick={handleSaveAll}
-            disabled={saving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 text-sm"
-          >
-            {saving ? "Đang lưu..." : "Thay toàn bộ pool"}
-          </button>
-          <button
-            onClick={handleAdd}
-            disabled={saving}
-            className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 text-sm"
-          >
-            Thêm 1 key vào pool
-          </button>
-        </div>
-
-        {testResults && (
-          <div className="mt-3 space-y-1 text-sm">
-            <p>
-              Kết quả test: <strong>{testResults.ok}/{testResults.total}</strong> key hoạt động.
-            </p>
-            <ul className="bg-slate-50 border border-slate-200 rounded p-2 max-h-48 overflow-auto text-xs space-y-1">
-              {testResults.results.map((r, i) => (
-                <li key={i} className={r.ok ? "text-emerald-700" : "text-red-700"}>
-                  {r.ok ? "✓" : "✗"} <span className="font-mono">{r.preview}</span> — {r.message}
-                </li>
-              ))}
-            </ul>
+      {/* Provider config */}
+      {provider && (
+        <div className="space-y-4 rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
+          <div className="text-xs font-semibold uppercase tracking-wider text-sky-400">
+            Model OCR đang dùng
           </div>
-        )}
-      </div>
-
-      {/* Bảng pool */}
-      {stats && stats.keys.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border border-slate-200 rounded bg-white">
-            <thead className="bg-slate-100">
-              <tr>
-                <th className="px-3 py-2 text-left">#</th>
-                <th className="px-3 py-2 text-left">Key</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
-                <th className="px-3 py-2 text-right">Dùng</th>
-                <th className="px-3 py-2 text-right">OK</th>
-                <th className="px-3 py-2 text-right">Lỗi</th>
-                <th className="px-3 py-2 text-right">CD (s)</th>
-                <th className="px-3 py-2 text-center">Hành động</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.keys.map((k) => (
-                <tr key={k.index} className="border-t border-slate-200">
-                  <td className="px-3 py-2">{k.index + 1}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{k.preview}</td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={`px-2 py-0.5 text-xs rounded border ${STATE_COLORS[k.state]}`}
-                      title={k.last_error}
-                    >
-                      {STATE_LABELS[k.state]}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">{k.used}</td>
-                  <td className="px-3 py-2 text-right text-emerald-700">{k.success}</td>
-                  <td className="px-3 py-2 text-right text-red-700">{k.errors}</td>
-                  <td className="px-3 py-2 text-right">
-                    {k.cooldown_remaining > 0 ? k.cooldown_remaining.toFixed(0) : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-center space-x-2">
-                    <button
-                      onClick={() => handleResetKey(k.index)}
-                      className="text-xs text-indigo-600 hover:underline"
-                      title="Đưa về trạng thái active"
-                    >
-                      Reset
-                    </button>
-                    <button
-                      onClick={() => handleRemove(k.index)}
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      Xoá
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex-1 min-w-40 text-sm font-medium text-[#ece3d7]">
+              Provider
+              <select
+                value={selectedProvider}
+                onChange={(e) => handleProviderChange(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-[#43372d] bg-[#261e18] px-3 py-2 text-[#ece3d7] focus:border-sky-500 focus:outline-none"
+              >
+                {(provider.providers || []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex-1 min-w-52 text-sm font-medium text-[#ece3d7]">
+              Model
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="mt-1.5 w-full rounded-xl border border-[#43372d] bg-[#261e18] px-3 py-2 text-[#ece3d7] focus:border-sky-500 focus:outline-none"
+              >
+                {availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.id})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              onClick={handleProviderSave}
+              disabled={saving || (selectedProvider === provider.provider && selectedModel === provider.model)}
+              className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              Lưu
+            </button>
+          </div>
+          <div className="text-xs text-sky-300/70">
+            Hiện dùng: <span className="font-mono font-semibold text-sky-300">{provider.provider}</span>
+            {" / "}
+            <span className="font-mono font-semibold text-sky-300">{provider.model}</span>
+          </div>
         </div>
       )}
 
-      {stats && stats.keys.length === 0 && (
-        <p className="text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded text-sm">
-          Pool trống — paste keys vào ô trên và bấm "Thay toàn bộ pool" để bắt đầu.
-        </p>
-      )}
+      {/* ===== 9router section ===== */}
+      <Section title="9router API Keys" subtitle={`OpenAI compatible · max 3 req/key · ${stats?.total ?? 0} key`} color="gold">
+        <StatsGrid stats={stats} />
 
-      <p className="text-xs text-slate-500">Stats refresh mỗi 5 giây. Keys lưu vào /app/data/keys.json (mount volume).</p>
+        <div className="space-y-3">
+          <p className="text-sm text-gold-700">
+            Mỗi key một dòng. Biến môi trường:{" "}
+            <code className="text-gold-400 bg-[#2f2620] px-1 rounded text-xs">NINEROUTER_API_KEY</code>
+          </p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={"sk-9router-key-1\nsk-9router-key-2"}
+            rows={5}
+            className="w-full rounded-xl border border-[#43372d] bg-[#211a15] p-3 font-mono text-xs text-[#ece3d7]
+              placeholder-gold-800 focus:border-gold-400 focus:outline-none resize-none"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleTest} disabled={testing}
+              className="flex items-center gap-2 rounded-xl bg-[#2f2620] px-4 py-2 text-sm font-semibold text-[#ece3d7] hover:bg-[#3d3228] disabled:opacity-50 border border-[#43372d]">
+              {testing && <Spinner />}
+              {testing ? "Đang kiểm tra..." : "Kiểm tra key"}
+            </button>
+            <button onClick={handleSaveAll} disabled={saving}
+              className="rounded-xl bg-gold-500 px-4 py-2 text-sm font-semibold text-[#17120e] hover:bg-gold-400 disabled:opacity-50">
+              Thay toàn bộ pool
+            </button>
+            <button onClick={handleAdd} disabled={saving}
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+              Thêm một key
+            </button>
+          </div>
+          <TestResultsBox results={testResults} />
+        </div>
+
+        <KeysTable stats={stats} onReset={handleReset} onRemove={handleRemove} />
+        <p className="text-xs text-gold-800">File: <code>/app/data/keys.json</code></p>
+      </Section>
+
+      {/* ===== Gemini section ===== */}
+      <Section title="Google Gemini API Keys" subtitle={`Vision API · max 10 req/key · ${geminiStats?.total ?? 0} key`} color="violet">
+        <StatsGrid stats={geminiStats} />
+
+        <div className="space-y-3">
+          <p className="text-sm text-gold-700">
+            Mỗi key một dòng (tối đa 10 key chạy song song). Biến môi trường:{" "}
+            <code className="text-gold-400 bg-[#2f2620] px-1 rounded text-xs">GEMINI_API_KEY</code>
+          </p>
+          <textarea
+            value={geminiBulkText}
+            onChange={(e) => setGeminiBulkText(e.target.value)}
+            placeholder={"AIzaSy...\nAIzaSy..."}
+            rows={5}
+            className="w-full rounded-xl border border-[#43372d] bg-[#211a15] p-3 font-mono text-xs text-[#ece3d7]
+              placeholder-gold-800 focus:border-violet-500 focus:outline-none resize-none"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleGeminiTest} disabled={geminiTesting}
+              className="flex items-center gap-2 rounded-xl bg-[#2f2620] px-4 py-2 text-sm font-semibold text-[#ece3d7] hover:bg-[#3d3228] disabled:opacity-50 border border-[#43372d]">
+              {geminiTesting && <Spinner />}
+              {geminiTesting ? "Đang kiểm tra..." : "Kiểm tra key"}
+            </button>
+            <button onClick={handleGeminiSaveAll} disabled={saving}
+              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50">
+              Thay toàn bộ pool
+            </button>
+            <button onClick={handleGeminiAdd} disabled={saving}
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+              Thêm một key
+            </button>
+          </div>
+          <TestResultsBox results={geminiTestResults} />
+        </div>
+
+        <KeysTable stats={geminiStats} onReset={handleGeminiReset} onRemove={handleGeminiRemove} />
+        <p className="text-xs text-gold-800">File: <code>/app/data/gemini_keys.json</code></p>
+      </Section>
+
+      <p className="text-xs text-gold-800">
+        Provider config: <code>/app/data/provider.json</code>
+      </p>
     </div>
   );
 }
 
-function Stat({ label, value, color = "text-slate-900" }) {
+function Section({ title, subtitle, color, children }) {
+  const borders = {
+    gold:   "border-gold-500/20 bg-gold-500/5",
+    violet: "border-violet-500/20 bg-violet-500/5",
+  };
   return (
-    <div className="bg-white border border-slate-200 rounded p-3">
-      <div className="text-xs text-slate-500 uppercase">{label}</div>
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+    <div className={`rounded-xl border p-4 space-y-4 ${borders[color] ?? "border-[#43372d] bg-[#261e18]/30"}`}>
+      <div>
+        <h3 className="font-semibold text-[#ece3d7]">{title}</h3>
+        <p className="text-xs text-gold-700 mt-0.5">{subtitle}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function StatsGrid({ stats }) {
+  if (!stats) return null;
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <StatCard label="Tổng key"     value={stats.total} />
+      <StatCard label="Sẵn sàng"     value={stats.active}         color="text-emerald-400" />
+      <StatCard label="Rate limit"   value={stats.rate_limited}   color="text-amber-400" />
+      <StatCard label="Hết quota"    value={stats.quota_exceeded} color="text-orange-400" />
+      <StatCard label="Không hợp lệ" value={stats.invalid}        color="text-red-400" />
+    </div>
+  );
+}
+
+function KeysTable({ stats, onReset, onRemove }) {
+  if (!stats?.keys?.length) {
+    return stats ? (
+      <StatusMsg color="amber">Pool đang trống. Hãy thêm API key để OCR hoạt động.</StatusMsg>
+    ) : null;
+  }
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[#43372d]">
+      <table className="min-w-full text-sm bg-[#261e18]/60">
+        <thead>
+          <tr className="border-b border-[#43372d] bg-[#261e18]">
+            {["#", "Key", "Trạng thái", "Dùng", "OK", "Lỗi", "Cooldown", ""].map((label) => (
+              <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gold-700">
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#43372d]/50">
+          {stats.keys.map((key) => (
+            <tr key={key.index} className="hover:bg-[#2f2620]/50">
+              <td className="px-4 py-3 text-gold-600">{key.index + 1}</td>
+              <td className="px-4 py-3 font-mono text-xs text-[#ece3d7]">{key.preview}</td>
+              <td className="px-4 py-3">
+                <span className={`rounded-lg border px-2 py-0.5 text-xs font-medium ${STATE_COLORS[key.state]}`} title={key.last_error}>
+                  {STATE_LABELS[key.state]}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-[#ece3d7]">{key.used}</td>
+              <td className="px-4 py-3 text-emerald-400">{key.success}</td>
+              <td className="px-4 py-3 text-red-400">{key.errors}</td>
+              <td className="px-4 py-3 text-gold-600">
+                {key.cooldown_remaining > 0 ? `${key.cooldown_remaining.toFixed(0)}s` : "—"}
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-3">
+                  <button onClick={() => onReset(key.index)} className="text-xs text-gold-400 hover:text-gold-300 font-medium">Reset</button>
+                  <button onClick={() => onRemove(key.index)} className="text-xs text-red-400 hover:text-red-300 font-medium">Xóa</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TestResultsBox({ results }) {
+  if (!results) return null;
+  return (
+    <div className="rounded-xl border border-[#43372d] bg-[#211a15] p-3 space-y-2">
+      <p className="text-sm font-semibold text-[#ece3d7]">
+        {results.ok}/{results.total} key hoạt động
+      </p>
+      {results.results.map((result, index) => (
+        <div key={index} className={`text-xs font-mono ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
+          <code>{result.preview}</code>: {result.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Spinner() {
+  return <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gold-400 border-t-transparent" />;
+}
+
+function StatusMsg({ color, children }) {
+  const styles = {
+    red:     "border-red-500/20 bg-red-500/10 text-red-300",
+    emerald: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+    amber:   "border-amber-500/20 bg-amber-500/10 text-amber-300",
+  };
+  return <div className={`rounded-xl border p-3 text-sm ${styles[color]}`}>{children}</div>;
+}
+
+function StatCard({ label, value, color = "text-[#ece3d7]" }) {
+  return (
+    <div className="rounded-xl border border-[#43372d] bg-[#261e18] p-3">
+      <div className="text-[10px] uppercase tracking-wider text-gold-700 font-semibold">{label}</div>
+      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
     </div>
   );
 }
