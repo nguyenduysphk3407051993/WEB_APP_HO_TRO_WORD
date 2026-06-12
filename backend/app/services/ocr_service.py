@@ -494,40 +494,56 @@ class OCRService:
     def extract_pdf_images(
         self, pdf_bytes: bytes, output_images_dir: Path
     ) -> dict[int, list[str]]:
-        """Trích xuất ảnh nhúng từ PDF, lưu vào output_images_dir.
-        Trả về {page_num: ['images/page_X_img_Y.ext', ...]}"""
+        """Crop vùng ảnh thực tế trên từng trang PDF (render + clip), lưu vào output_images_dir.
+        Trả về {page_num: ['images/page_X_img_Y.png', ...]}"""
         import fitz
 
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         output_images_dir.mkdir(parents=True, exist_ok=True)
         extracted: dict[int, list[str]] = {}
+        mat = fitz.Matrix(2.0, 2.0)  # 2× resolution để giữ chất lượng
 
         try:
             for page_index in range(len(doc)):
                 page_num = page_index + 1
                 page = doc.load_page(page_index)
-                image_list = page.get_images(full=True)
                 page_images: list[str] = []
+                img_counter = 0
 
-                for img_idx, img in enumerate(image_list):
+                try:
+                    img_info_list = page.get_image_info(xrefs=True)
+                except Exception:
+                    img_info_list = []
+
+                seen: set[tuple] = set()
+                for info in img_info_list:
                     try:
-                        xref = img[0]
-                        base_image = doc.extract_image(xref)
-                        image_bytes = base_image["image"]
-                        image_ext = base_image["ext"]
-
-                        # Bỏ qua ảnh quá nhỏ (icon, vạch phân cách, trang trí)
-                        if len(image_bytes) < 2048:
+                        bbox = info.get("bbox")
+                        if not bbox:
                             continue
 
-                        img_name = f"page_{page_num}_img_{img_idx + 1}.{image_ext}"
-                        (output_images_dir / img_name).write_bytes(image_bytes)
+                        rect = fitz.Rect(bbox)
+                        # Bỏ qua hình nhỏ (icon, đường kẻ, trang trí)
+                        if rect.width < 50 or rect.height < 50:
+                            continue
+
+                        # Loại trùng lặp bounding box
+                        key = (round(rect.x0), round(rect.y0), round(rect.x1), round(rect.y1))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+
+                        # Crop phần render của trang tại vị trí ảnh
+                        pix = page.get_pixmap(matrix=mat, clip=rect, alpha=False)
+                        if pix.width < 80 or pix.height < 80:
+                            continue
+
+                        img_counter += 1
+                        img_name = f"page_{page_num}_img_{img_counter}.png"
+                        (output_images_dir / img_name).write_bytes(pix.tobytes("png"))
                         page_images.append(f"images/{img_name}")
                     except Exception as exc:
-                        logger.warning(
-                            "Loi trich xuat anh xref %s trang %d: %s",
-                            img[0], page_num, exc,
-                        )
+                        logger.warning("Loi crop anh trang %d: %s", page_num, exc)
 
                 if page_images:
                     extracted[page_num] = page_images

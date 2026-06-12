@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Dropzone from "./Dropzone";
 import MathPreview from "./MathPreview";
 import CopyButton from "./CopyButton";
@@ -54,6 +54,25 @@ export default function OcrTab() {
   const [pdfResult, setPdfResult] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const pdfProgressTimer = useRef(null);
+
+  // Animate PDF progress bar 0% → 90% while loading, then snap to 100%
+  useEffect(() => {
+    if (pdfLoading) {
+      setPdfProgress(0);
+      pdfProgressTimer.current = setInterval(() => {
+        setPdfProgress((p) => {
+          const next = p + (90 - p) * 0.06;
+          return next >= 89.5 ? 89.5 : next;
+        });
+      }, 250);
+    } else {
+      clearInterval(pdfProgressTimer.current);
+      if (pdfResult || pdfError) setPdfProgress(100);
+    }
+    return () => clearInterval(pdfProgressTimer.current);
+  }, [pdfLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateItem = useCallback(
     (id, patch) => setQueue((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it))),
@@ -109,6 +128,7 @@ export default function OcrTab() {
     async (file) => {
       setPdfError("");
       setPdfResult(null);
+      setPdfProgress(0);
       setPdfLoading(true);
       try {
         const opts = { mode: "page", maxConcurrent };
@@ -248,17 +268,25 @@ export default function OcrTab() {
           {/* Queue panel */}
           {queue.length > 0 && (
             <div className="rounded-xl border border-[#3d3018] bg-[#1f1b0e]/60 overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#3d3018]">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-semibold text-[#f0dfa0]">{qStats.total} ảnh</span>
-                  {qStats.running > 0 && <Badge color="gold">{qStats.running} đang xử lý</Badge>}
-                  {qStats.pending > 0 && <Badge color="dim">{qStats.pending} chờ</Badge>}
-                  {qStats.done    > 0 && <Badge color="emerald">{qStats.done} xong</Badge>}
-                  {qStats.errors  > 0 && <Badge color="red">{qStats.errors} lỗi</Badge>}
+              <div className="px-4 py-3 border-b border-[#3d3018] space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-semibold text-[#f0dfa0]">{qStats.total} ảnh</span>
+                    {qStats.running > 0 && <Badge color="gold">{qStats.running} đang xử lý</Badge>}
+                    {qStats.pending > 0 && <Badge color="dim">{qStats.pending} chờ</Badge>}
+                    {qStats.done    > 0 && <Badge color="emerald">{qStats.done} xong</Badge>}
+                    {qStats.errors  > 0 && <Badge color="red">{qStats.errors} lỗi</Badge>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-gold-400 tabular-nums">
+                      {Math.round((qStats.done + qStats.errors) / qStats.total * 100)}%
+                    </span>
+                    <button onClick={() => setQueue([])} className="text-xs text-gold-700 hover:text-gold-400 transition">
+                      Xóa tất cả
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => setQueue([])} className="text-xs text-gold-700 hover:text-gold-400 transition">
-                  Xóa tất cả
-                </button>
+                <ProgressBar value={(qStats.done + qStats.errors) / qStats.total * 100} />
               </div>
               <ul className="max-h-64 overflow-y-auto divide-y divide-[#3d3018]/60">
                 {queue.map((item) => (
@@ -329,10 +357,16 @@ export default function OcrTab() {
         <>
           <Dropzone onFile={handlePdfFile} accept={pdfAccept} hint={hints[outputTarget].pdf} />
 
-          {pdfLoading && (
-            <div className="flex items-center gap-3 rounded-xl border border-gold-400/20 bg-gold-400/10 p-4 text-gold-300">
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-gold-400 border-t-transparent shrink-0" />
-              <span className="text-sm">{loadingMsg[outputTarget]}</span>
+          {(pdfLoading || pdfProgress > 0) && (
+            <div className="rounded-xl border border-gold-400/20 bg-gold-400/10 p-4 space-y-3">
+              <div className="flex items-center gap-3 text-gold-300">
+                {pdfLoading && (
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-gold-400 border-t-transparent shrink-0" />
+                )}
+                <span className="text-sm flex-1">{pdfLoading ? loadingMsg[outputTarget] : (pdfError ? "Xử lý thất bại" : "Hoàn thành")}</span>
+                <span className="text-sm font-bold text-gold-400 tabular-nums">{Math.round(pdfProgress)}%</span>
+              </div>
+              <ProgressBar value={pdfProgress} />
             </div>
           )}
 
@@ -372,6 +406,21 @@ export default function OcrTab() {
 }
 
 // ─── sub-components ──────────────────────────────────────────────────────────
+
+function ProgressBar({ value }) {
+  const pct = Math.min(100, Math.max(0, value));
+  const isComplete = pct >= 100;
+  return (
+    <div className="h-1.5 w-full rounded-full bg-[#3d3018] overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-300 ease-out ${
+          isComplete ? "bg-emerald-500" : "bg-gold-400"
+        }`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 function Badge({ color, children }) {
   const cls = {
