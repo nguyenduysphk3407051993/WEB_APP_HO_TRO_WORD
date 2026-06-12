@@ -528,12 +528,13 @@ class ConverterService:
     # ──────────────────────────────────────────────────────────────
 
     def _split_solution_keyword_paragraphs(self, document: Document) -> None:
-        """Nếu paragraph chứa 'Lời giải:...' + nội dung, tách thành 2 đoạn riêng."""
+        """Nếu paragraph BẮT ĐẦU bằng 'Lời giải:/Đáp án:...' + nội dung, tách thành 2 đoạn."""
         for paragraph in list(document.paragraphs):
-            text = paragraph.text
+            text = paragraph.text.strip()
             if not text:
                 continue
-            match = _SOLUTION_KEYWORDS_RE.search(text)
+            # Chỉ match tại đầu đoạn — tránh phá nội dung câu hỏi có chứa "đáp án" giữa câu
+            match = _SOLUTION_KEYWORDS_RE.match(text)
             if not match:
                 continue
             after = text[match.end():].strip()
