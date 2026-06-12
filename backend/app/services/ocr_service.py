@@ -491,9 +491,16 @@ class OCRService:
             max_concurrent_pages=max_concurrent_pages,
         )
 
+    # Ngưỡng nhận diện hình vẽ thật (đơn vị point, 1pt ≈ 0.353mm)
+    _FIG_MIN_W = 80.0       # hình hẹp hơn → là mảnh công thức/ký hiệu
+    _FIG_MIN_H = 80.0       # hình thấp hơn → là dòng công thức/gạch phân số
+    _FIG_MIN_PATHS = 8      # cluster vector cần đủ nét mới là hình
+    _FIG_MAX_W_RATIO = 0.85  # rộng hơn 85% bề ngang trang → dải/bảng full-width
+    _FIG_MAX_AREA_RATIO = 0.70  # lớn hơn 70% diện tích trang → scan nguyên trang
+
     @staticmethod
-    def _cluster_rects(rects: list, margin: float = 8.0, min_w: float = 40.0, min_h: float = 40.0) -> list:
-        """Gộp các rect gần nhau / chồng lấp thành vùng tổng hợp."""
+    def _cluster_rects(rects: list, margin: float = 6.0) -> list:
+        """Gộp các rect gần nhau / chồng lấp thành (vùng_tổng_hợp, số_nét)."""
         import fitz
         if not rects:
             return []
@@ -505,6 +512,7 @@ class OCRService:
                 continue
             cluster = fitz.Rect(r)
             used[i] = True
+            count = 1
             changed = True
             while changed:
                 changed = False
@@ -514,63 +522,78 @@ class OCRService:
                     if cluster.intersects(r2):
                         cluster |= r2
                         used[j] = True
+                        count += 1
                         changed = True
-            if cluster.width >= min_w and cluster.height >= min_h:
-                clusters.append(cluster)
+            clusters.append((cluster, count))
         return clusters
+
+    def _is_real_figure(self, rect, page_rect) -> bool:
+        """Phân biệt hình vẽ thật với công thức / scan nguyên trang / bảng full-width."""
+        pw = page_rect.width
+        parea = page_rect.width * page_rect.height
+        if rect.width < self._FIG_MIN_W or rect.height < self._FIG_MIN_H:
+            return False  # mảnh công thức / ký hiệu nhỏ
+        if rect.width > self._FIG_MAX_W_RATIO * pw:
+            return False  # dải scan / bảng chiếm gần hết bề ngang
+        if rect.width * rect.height > self._FIG_MAX_AREA_RATIO * parea:
+            return False  # ảnh scan nguyên trang
+        return True
 
     def extract_pdf_images(
         self, pdf_bytes: bytes, output_images_dir: Path
     ) -> dict[int, list[str]]:
-        """Trích xuất hình vẽ từ PDF: cả ảnh nhúng lẫn vector drawings.
-        - Raster images: lấy vị trí qua get_image_info() rồi render+crop
-        - Vector drawings: cluster get_drawings() rects rồi render+crop
+        """Crop đúng hình vẽ (hình học, đồ thị, biểu đồ) trong PDF, bỏ qua công thức,
+        scan nguyên trang và bảng. Render vùng hình ở 2× rồi lưu PNG.
         Trả về {page_num: ['images/page_X_img_Y.png', ...]}"""
         import fitz
 
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         output_images_dir.mkdir(parents=True, exist_ok=True)
         extracted: dict[int, list[str]] = {}
-        mat = fitz.Matrix(2.0, 2.0)  # 2× resolution
+        mat = fitz.Matrix(2.0, 2.0)  # 2× resolution để giữ nét
+        pad = 4.0  # đệm để không cắt mất nhãn điểm A,B,C / trục toạ độ
 
         try:
             for page_index in range(len(doc)):
                 page_num = page_index + 1
                 page = doc.load_page(page_index)
-                raw_rects: list = []
+                page_rect = page.rect
+                regions: list = []
 
-                # ── Raster images: vị trí thực tế trên trang ──
+                # ── Ảnh raster đặt trên trang (ảnh thật, không phải scan/công thức) ──
                 try:
                     for info in page.get_image_info(xrefs=True):
                         bbox = info.get("bbox")
-                        if bbox:
-                            raw_rects.append(fitz.Rect(bbox))
+                        if not bbox:
+                            continue
+                        r = fitz.Rect(bbox)
+                        if self._is_real_figure(r, page_rect):
+                            regions.append(r)
                 except Exception:
                     pass
 
-                # ── Vector drawings (hình học, đồ thị, đường kẻ) ──
+                # ── Hình vector (hình học, đồ thị): cluster các nét gần nhau ──
                 try:
-                    for d in page.get_drawings():
-                        r = d.get("rect")
-                        if r and not fitz.Rect(r).is_empty:
-                            raw_rects.append(fitz.Rect(r))
+                    vec_rects = [
+                        fitz.Rect(d["rect"])
+                        for d in page.get_drawings()
+                        if d.get("rect") and not fitz.Rect(d["rect"]).is_empty
+                    ]
+                    for cluster, count in self._cluster_rects(vec_rects, margin=6):
+                        if count >= self._FIG_MIN_PATHS and self._is_real_figure(cluster, page_rect):
+                            regions.append(cluster)
                 except Exception:
                     pass
-
-                # Gộp các vùng gần nhau thành hình tổng hợp
-                regions = self._cluster_rects(raw_rects, margin=8, min_w=50, min_h=50)
 
                 page_images: list[str] = []
                 for idx, rect in enumerate(regions):
                     try:
-                        # Cắt bỏ phần ngoài trang
-                        rect &= page.rect
-                        if rect.is_empty or rect.width < 50 or rect.height < 50:
+                        rect = fitz.Rect(
+                            rect.x0 - pad, rect.y0 - pad, rect.x1 + pad, rect.y1 + pad
+                        ) & page_rect
+                        if rect.is_empty:
                             continue
                         pix = page.get_pixmap(matrix=mat, clip=rect, alpha=False)
-                        # Bỏ ảnh pixel quá nhỏ sau khi render
-                        if pix.width < 80 or pix.height < 80:
-                            continue
                         img_name = f"page_{page_num}_img_{idx + 1}.png"
                         (output_images_dir / img_name).write_bytes(pix.tobytes("png"))
                         page_images.append(f"images/{img_name}")
