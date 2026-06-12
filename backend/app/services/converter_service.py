@@ -92,6 +92,12 @@ _SOLUTION_KEYWORDS_RE   = re.compile(
     r"(Lời giải\s*[:.]|Hướng dẫn giải\s*[:.]|Đáp án\s*[:.:]?)",
     re.IGNORECASE,
 )
+# Nhãn lời giải để TÁCH RA DÒNG RIÊNG — bắt buộc có dấu ':' hoặc '.' ngay sau,
+# nên "đáp án đúng" trong câu hỏi (không có dấu) sẽ KHÔNG bị tách nhầm.
+_SOLUTION_LABEL_RE = re.compile(
+    r"(Lời giải|Hướng dẫn giải|Hướng dẫn|Cách giải|Đáp án)\s*[:.]",
+    re.IGNORECASE,
+)
 
 _DOCUMENT_FONT_NAME = "Times New Roman"
 _DOCUMENT_BODY_FONT_SIZE = 12
@@ -555,22 +561,45 @@ class ConverterService:
     # ──────────────────────────────────────────────────────────────
 
     def _split_solution_keyword_paragraphs(self, document: Document) -> None:
-        """Nếu paragraph BẮT ĐẦU bằng 'Lời giải:/Đáp án:...' + nội dung, tách thành 2 đoạn."""
+        """Đưa nhãn 'Lời giải:/Hướng dẫn giải:/Đáp án:' ra MỘT DÒNG RIÊNG.
+
+        Tách kể cả khi có nội dung phía trước nhãn trong cùng đoạn:
+            [text trước]  →  đoạn riêng
+            [Lời giải:]   →  đoạn riêng (nhãn đứng một mình)
+            [text sau]    →  đoạn riêng
+        Bỏ qua câu hỏi (Câu/Bài/Ví dụ) để không phá định dạng đề.
+        """
         for paragraph in list(document.paragraphs):
             text = paragraph.text.strip()
             if not text:
                 continue
-            # Chỉ match tại đầu đoạn — tránh phá nội dung câu hỏi có chứa "đáp án" giữa câu
-            match = _SOLUTION_KEYWORDS_RE.match(text)
+            # Không đụng vào dòng câu hỏi
+            if _QUESTION_PREFIX_RE.match(text):
+                continue
+
+            match = _SOLUTION_LABEL_RE.search(text)
             if not match:
                 continue
+
+            before = text[: match.start()].strip()
+            label = match.group(0).strip()
             after = text[match.end():].strip()
-            if not after:
+
+            # Nhãn đã đứng riêng một mình → không cần làm gì
+            if not before and not after:
                 continue
-            # Giữ keyword ở đoạn hiện tại, nội dung còn lại sang đoạn mới bên dưới
-            self._clear_paragraph(paragraph)
-            paragraph.add_run(match.group(1))
-            self._insert_paragraph_after(paragraph, after)
+
+            # before (nếu có) giữ ở đoạn hiện tại, rồi chèn nhãn, rồi nội dung sau
+            if before:
+                self._set_paragraph_text(paragraph, before)
+                anchor = self._insert_paragraph_after(paragraph, label)
+            else:
+                self._clear_paragraph(paragraph)
+                paragraph.add_run(label)
+                anchor = paragraph
+
+            if after:
+                self._insert_paragraph_after(anchor, after)
 
     # ──────────────────────────────────────────────────────────────
     # Highlight "Lời giải", "Hướng dẫn giải", "Đáp án" in đậm đỏ
