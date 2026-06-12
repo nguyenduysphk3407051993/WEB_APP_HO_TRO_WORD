@@ -49,10 +49,8 @@ export default function OcrTab() {
   const [ocrMode, setOcrMode] = useState("page");
   const [maxConcurrent, setMaxConcurrent] = useState(5);
 
-  // Image batch queue
   const [queue, setQueue] = useState([]);
 
-  // PDF single result
   const [pdfResult, setPdfResult] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState("");
@@ -157,12 +155,12 @@ export default function OcrTab() {
   return (
     <div className="space-y-5">
       {/* Info */}
-      <div className="flex items-start gap-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3">
+      <div className="flex items-start gap-3 rounded-xl border border-gold-400/20 bg-gold-400/10 px-4 py-3">
         <InfoIcon />
-        <p className="text-sm text-indigo-300">
+        <p className="text-sm text-gold-300">
           <strong>Word + Toggle TeX</strong> · <strong>Exam LaTeX</strong> · <strong>Equation (OMML)</strong>
           <br />
-          <span className="text-indigo-400 text-xs">
+          <span className="text-gold-500 text-xs">
             Chế độ ảnh: kéo nhiều file, chọn thư mục, hoặc dán Ctrl+V từ clipboard.
           </span>
         </p>
@@ -176,8 +174,8 @@ export default function OcrTab() {
             onClick={() => { setMode(v); setQueue([]); setPdfResult(null); setPdfError(""); }}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
               mode === v
-                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/25"
-                : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 border border-slate-700"
+                ? "bg-gold-500 text-[#0c0a05] shadow-lg shadow-gold-500/25"
+                : "bg-[#1f1b0e] text-gold-600 hover:bg-[#2a2412] hover:text-gold-200 border border-[#3d3018]"
             }`}
           >
             {v === "image" ? <ImageIcon /> : <PdfIcon />}
@@ -187,9 +185,9 @@ export default function OcrTab() {
       </div>
 
       {/* Options */}
-      <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+      <div className="space-y-3 rounded-xl border border-[#3d3018] bg-[#1f1b0e]/60 p-4">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="font-semibold text-slate-300">Đầu ra:</span>
+          <span className="font-semibold text-[#f0dfa0]">Đầu ra:</span>
           {[
             { id: "word",      label: "Word + Toggle TeX" },
             { id: "examlatex", label: "Exam LaTeX" },
@@ -200,8 +198,8 @@ export default function OcrTab() {
               onClick={() => setOutputTarget(item.id)}
               className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
                 outputTarget === item.id
-                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/25"
-                  : "bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200"
+                  ? "bg-gold-500 text-[#0c0a05] shadow-lg shadow-gold-500/25"
+                  : "bg-[#2a2412] text-gold-600 hover:bg-[#342d18] hover:text-gold-200"
               }`}
             >
               {item.label}
@@ -211,11 +209,11 @@ export default function OcrTab() {
 
         {mode === "image" && (
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <label className="font-semibold text-slate-300">Chế độ OCR:</label>
+            <label className="font-semibold text-[#f0dfa0]">Chế độ OCR:</label>
             <select
               value={ocrMode}
               onChange={(e) => setOcrMode(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-slate-200 focus:border-indigo-500 focus:outline-none"
+              className="rounded-lg border border-[#4a3c18] bg-[#2a2412] px-3 py-1.5 text-[#f0dfa0] focus:border-gold-400 focus:outline-none"
             >
               <option value="single">1 công thức / vùng nhỏ</option>
               <option value="page">Cả trang / giữ cấu trúc</option>
@@ -224,13 +222,13 @@ export default function OcrTab() {
         )}
 
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="font-semibold text-slate-300">
+          <label className="font-semibold text-[#f0dfa0]">
             {mode === "image" ? "Xử lý song song (ảnh):" : "Trang song song (PDF):"}
           </label>
           <input
             type="number" min={1} max={20} value={maxConcurrent}
             onChange={(e) => setMaxConcurrent(Number(e.target.value))}
-            className="w-20 rounded-lg border border-slate-600 bg-slate-700 px-3 py-1.5 text-slate-200 focus:border-indigo-500 focus:outline-none"
+            className="w-20 rounded-lg border border-[#4a3c18] bg-[#2a2412] px-3 py-1.5 text-[#f0dfa0] focus:border-gold-400 focus:outline-none"
           />
         </div>
       </div>
@@ -249,20 +247,20 @@ export default function OcrTab() {
 
           {/* Queue panel */}
           {queue.length > 0 && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-700">
+            <div className="rounded-xl border border-[#3d3018] bg-[#1f1b0e]/60 overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[#3d3018]">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-semibold text-slate-200">{qStats.total} ảnh</span>
-                  {qStats.running > 0 && <Badge color="indigo">{qStats.running} đang xử lý</Badge>}
-                  {qStats.pending > 0 && <Badge color="slate">{qStats.pending} chờ</Badge>}
+                  <span className="font-semibold text-[#f0dfa0]">{qStats.total} ảnh</span>
+                  {qStats.running > 0 && <Badge color="gold">{qStats.running} đang xử lý</Badge>}
+                  {qStats.pending > 0 && <Badge color="dim">{qStats.pending} chờ</Badge>}
                   {qStats.done    > 0 && <Badge color="emerald">{qStats.done} xong</Badge>}
                   {qStats.errors  > 0 && <Badge color="red">{qStats.errors} lỗi</Badge>}
                 </div>
-                <button onClick={() => setQueue([])} className="text-xs text-slate-500 hover:text-slate-300 transition">
+                <button onClick={() => setQueue([])} className="text-xs text-gold-700 hover:text-gold-400 transition">
                   Xóa tất cả
                 </button>
               </div>
-              <ul className="max-h-64 overflow-y-auto divide-y divide-slate-700/60">
+              <ul className="max-h-64 overflow-y-auto divide-y divide-[#3d3018]/60">
                 {queue.map((item) => (
                   <QueueItem
                     key={item.id}
@@ -283,7 +281,7 @@ export default function OcrTab() {
           {outputTarget === "examlatex" && queue.some((q) => q.status === "done") && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-slate-200">Kết quả Exam LaTeX</h3>
+                <h3 className="font-semibold text-[#f0dfa0]">Kết quả Exam LaTeX</h3>
                 <CopyButton
                   text={queue
                     .filter((q) => q.status === "done" && q.result?.data?.latex)
@@ -297,7 +295,7 @@ export default function OcrTab() {
                 .map((q) => (
                   <div key={q.id} className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-slate-400 truncate">{q.name}</p>
+                      <p className="text-xs font-medium text-gold-600 truncate">{q.name}</p>
                       <CopyButton text={q.result.data.latex} />
                     </div>
                     <ExamLatexBlock latex={q.result.data.latex} />
@@ -310,7 +308,7 @@ export default function OcrTab() {
           {(outputTarget === "word" || outputTarget === "equation") &&
             queue.some((q) => q.status === "done") && (
               <div className="space-y-2">
-                <h3 className="font-semibold text-slate-200">File đã tạo</h3>
+                <h3 className="font-semibold text-[#f0dfa0]">File đã tạo</h3>
                 {queue
                   .filter((q) => q.status === "done")
                   .map((q) => (
@@ -332,8 +330,8 @@ export default function OcrTab() {
           <Dropzone onFile={handlePdfFile} accept={pdfAccept} hint={hints[outputTarget].pdf} />
 
           {pdfLoading && (
-            <div className="flex items-center gap-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4 text-indigo-300">
-              <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent shrink-0" />
+            <div className="flex items-center gap-3 rounded-xl border border-gold-400/20 bg-gold-400/10 p-4 text-gold-300">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-gold-400 border-t-transparent shrink-0" />
               <span className="text-sm">{loadingMsg[outputTarget]}</span>
             </div>
           )}
@@ -360,7 +358,7 @@ export default function OcrTab() {
           {pdfResult?.type === "examlatex" &&
             pdfResult.data?.pages?.map((page) => (
               <div key={page.page} className="space-y-2">
-                <h3 className="font-semibold text-slate-200">
+                <h3 className="font-semibold text-[#f0dfa0]">
                   Trang {page.page}
                   {page.error && <span className="ml-2 text-xs text-red-400">(lỗi: {page.error})</span>}
                 </h3>
@@ -376,14 +374,19 @@ export default function OcrTab() {
 // ─── sub-components ──────────────────────────────────────────────────────────
 
 function Badge({ color, children }) {
-  const cls = { indigo: "bg-indigo-500/20 text-indigo-300", emerald: "bg-emerald-500/20 text-emerald-300", red: "bg-red-500/20 text-red-300", slate: "bg-slate-600/60 text-slate-400" };
-  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls[color] ?? cls.slate}`}>{children}</span>;
+  const cls = {
+    gold:    "bg-gold-500/20 text-gold-300",
+    emerald: "bg-emerald-500/20 text-emerald-300",
+    red:     "bg-red-500/20 text-red-300",
+    dim:     "bg-[#3d3018]/60 text-gold-600",
+  };
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls[color] ?? cls.dim}`}>{children}</span>;
 }
 
 function QueueItem({ item, onRemove, onDownload }) {
   const icon = {
-    pending: <span className="h-4 w-4 rounded-full border-2 border-slate-600 inline-block shrink-0" />,
-    running: <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent inline-block shrink-0" />,
+    pending: <span className="h-4 w-4 rounded-full border-2 border-[#4a3c18] inline-block shrink-0" />,
+    running: <span className="h-4 w-4 animate-spin rounded-full border-2 border-gold-400 border-t-transparent inline-block shrink-0" />,
     done:    <svg className="w-4 h-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
     error:   <svg className="w-4 h-4 shrink-0 text-red-400"     fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
   };
@@ -391,7 +394,7 @@ function QueueItem({ item, onRemove, onDownload }) {
   return (
     <li className="flex items-center gap-3 px-4 py-2.5 text-sm">
       {icon[item.status]}
-      <span className="flex-1 truncate text-slate-300" title={item.name}>{item.name}</span>
+      <span className="flex-1 truncate text-[#f0dfa0]" title={item.name}>{item.name}</span>
       {item.error && <span className="shrink-0 text-xs text-red-400 max-w-[180px] truncate" title={item.error}>{item.error}</span>}
       {onDownload && (
         <button onClick={onDownload} title="Tải lại" className="shrink-0 text-emerald-400 hover:text-emerald-300 transition">
@@ -401,7 +404,7 @@ function QueueItem({ item, onRemove, onDownload }) {
         </button>
       )}
       {item.status !== "running" && (
-        <button onClick={onRemove} title="Xóa" className="shrink-0 text-slate-600 hover:text-slate-400 transition">
+        <button onClick={onRemove} title="Xóa" className="shrink-0 text-gold-800 hover:text-gold-600 transition">
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -413,10 +416,10 @@ function QueueItem({ item, onRemove, onDownload }) {
 
 function WordResultRow({ name, payload, onDownload }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm">
+    <div className="flex items-center justify-between rounded-lg border border-[#3d3018] bg-[#1f1b0e] px-4 py-3 text-sm">
       <div>
-        <p className="font-medium text-slate-200">{name}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{payload.filename} · {payload.total_formulas} công thức</p>
+        <p className="font-medium text-[#f0dfa0]">{name}</p>
+        <p className="text-xs text-gold-700 mt-0.5">{payload.filename} · {payload.total_formulas} công thức</p>
       </div>
       <button
         onClick={onDownload}
@@ -435,12 +438,12 @@ function ExamLatexBlock({ latex }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">
-          Định dạng <code className="text-slate-400">\begin&#123;ex&#125;...\choice...\end&#123;ex&#125;</code>
+        <p className="text-xs text-gold-700">
+          Định dạng <code className="text-gold-600">\begin&#123;ex&#125;...\choice...\end&#123;ex&#125;</code>
         </p>
         <CopyButton text={latex} />
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-emerald-400 border border-slate-800 leading-relaxed">
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[#0c0a05] p-4 text-sm text-emerald-400 border border-[#2e2610] leading-relaxed">
         {latex}
       </pre>
     </div>
@@ -482,13 +485,13 @@ function WordResultBlock({ result, onDownloadAgain, isEquation = false }) {
       </div>
 
       {result.pages?.length > 0 && (
-        <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4">
-          <h4 className="text-sm font-semibold text-slate-300 mb-3">Tổng hợp theo trang</h4>
+        <div className="rounded-xl border border-[#3d3018] bg-[#1f1b0e]/60 p-4">
+          <h4 className="text-sm font-semibold text-[#f0dfa0] mb-3">Tổng hợp theo trang</h4>
           <div className="grid gap-2 sm:grid-cols-2">
             {result.pages.map((page) => (
-              <div key={page.page} className="rounded-lg border border-slate-700 bg-slate-800 p-3 text-sm">
-                <div className="font-medium text-slate-200">Trang {page.page}</div>
-                <div className="mt-1 text-slate-400">Công thức: <span className="font-medium text-slate-300">{page.formula_count}</span></div>
+              <div key={page.page} className="rounded-lg border border-[#3d3018] bg-[#1f1b0e] p-3 text-sm">
+                <div className="font-medium text-[#f0dfa0]">Trang {page.page}</div>
+                <div className="mt-1 text-gold-600">Công thức: <span className="font-medium text-[#f0dfa0]">{page.formula_count}</span></div>
                 {page.error && <div className="mt-1.5 text-xs text-red-400">Lỗi OCR: {page.error}</div>}
               </div>
             ))}
@@ -497,12 +500,12 @@ function WordResultBlock({ result, onDownloadAgain, isEquation = false }) {
       )}
 
       {!isEquation && result.latex_output && (
-        <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/60 p-4">
+        <div className="space-y-3 rounded-xl border border-[#3d3018] bg-[#1f1b0e]/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold text-slate-200">LaTeX cho Toggle TeX</h4>
+            <h4 className="text-sm font-semibold text-[#f0dfa0]">LaTeX cho Toggle TeX</h4>
             <CopyButton text={result.latex_output} label="Copy tất cả" />
           </div>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-4 text-sm text-emerald-400 border border-slate-800">
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[#0c0a05] p-4 text-sm text-emerald-400 border border-[#2e2610]">
             {result.latex_output}
           </pre>
         </div>
@@ -517,22 +520,22 @@ function WordResultBlock({ result, onDownloadAgain, isEquation = false }) {
 
 function SummaryItem({ label, value }) {
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{label}</div>
-      <div className="mt-1 font-bold text-slate-200">{value}</div>
+    <div className="rounded-xl border border-[#3d3018] bg-[#1f1b0e] px-3 py-3">
+      <div className="text-[10px] uppercase tracking-wider text-gold-700 font-semibold">{label}</div>
+      <div className="mt-1 font-bold text-[#f0dfa0]">{value}</div>
     </div>
   );
 }
 
 function FormulaCard({ formula, isEquation = false }) {
   return (
-    <div className="space-y-4 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+    <div className="space-y-4 rounded-xl border border-[#3d3018] bg-[#1f1b0e]/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h5 className="font-semibold text-slate-200">
+          <h5 className="font-semibold text-[#f0dfa0]">
             Công thức #{formula.id}{formula.page ? ` — Trang ${formula.page}` : ""}
           </h5>
-          <p className="text-xs text-slate-500 mt-0.5">{formula.display ? "Display math" : "Inline math"}</p>
+          <p className="text-xs text-gold-700 mt-0.5">{formula.display ? "Display math" : "Inline math"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <CopyButton text={formula.latex_source || formula.latex} label="LaTeX" />
@@ -541,23 +544,23 @@ function FormulaCard({ formula, isEquation = false }) {
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">LaTeX</div>
-        <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-sm text-emerald-400 border border-slate-800">
+        <div className="text-xs font-semibold text-gold-600 uppercase tracking-wide">LaTeX</div>
+        <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[#0c0a05] p-3 text-sm text-emerald-400 border border-[#2e2610]">
           {formula.latex_source || formula.latex}
         </pre>
       </div>
 
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Preview</div>
-        <div className="rounded-lg border border-slate-700 bg-white p-3">
+        <div className="text-xs font-semibold text-gold-600 uppercase tracking-wide">Preview</div>
+        <div className="rounded-lg border border-[#3d3018] bg-white p-3">
           <MathPreview latex={formula.latex} display={formula.display} />
         </div>
       </div>
 
       {formula.mathml && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">MathML</div>
-          <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs text-amber-400 border border-slate-800">
+          <div className="text-xs font-semibold text-gold-600 uppercase tracking-wide">MathML</div>
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-[#0c0a05] p-3 text-xs text-amber-400 border border-[#2e2610]">
             {formula.mathml}
           </pre>
         </div>
@@ -570,7 +573,7 @@ function FormulaCard({ formula, isEquation = false }) {
 
 function InfoIcon() {
   return (
-    <svg className="w-4 h-4 mt-0.5 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg className="w-4 h-4 mt-0.5 shrink-0 text-gold-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );

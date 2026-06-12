@@ -33,16 +33,16 @@ export default function LatexToEquationTab() {
     <div className="space-y-5">
       {/* Input */}
       <div>
-        <label className="block text-sm font-semibold text-slate-300 mb-2">
+        <label className="block text-sm font-semibold text-[#f0dfa0] mb-2">
           Nội dung LaTeX{" "}
-          <span className="text-slate-500 font-normal">(có thể chứa văn bản + công thức)</span>
+          <span className="text-gold-700 font-normal">(có thể chứa văn bản + công thức)</span>
         </label>
         <textarea
           value={latex}
           onChange={(e) => setLatex(e.target.value)}
           rows={12}
-          className="w-full rounded-xl border border-slate-700 bg-slate-800/80 p-4 font-mono text-sm text-slate-200
-            placeholder-slate-600 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 resize-none"
+          className="w-full rounded-xl border border-[#3d3018] bg-[#1f1b0e]/80 p-4 font-mono text-sm text-[#f0dfa0]
+            placeholder-gold-800 focus:border-gold-400 focus:outline-none focus:ring-1 focus:ring-gold-400/30 resize-none"
           placeholder="Nhập nội dung LaTeX..."
         />
       </div>
@@ -70,7 +70,7 @@ export default function LatexToEquationTab() {
             </>
           )}
         </button>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-gold-700">
           File .docx mở trong Word, công thức là OMML native (Equation Editor).
         </p>
       </div>
@@ -86,8 +86,8 @@ export default function LatexToEquationTab() {
 
       {/* Preview */}
       <div>
-        <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">Preview (rendered)</h4>
-        <div className="rounded-xl border border-slate-700 bg-white p-4 min-h-20 text-sm whitespace-pre-wrap">
+        <h4 className="text-sm font-semibold text-gold-600 uppercase tracking-wide mb-2">Preview (rendered)</h4>
+        <div className="rounded-xl border border-[#3d3018] bg-white p-4 min-h-20 text-sm whitespace-pre-wrap">
           <MathPreview latex={latex} />
         </div>
       </div>

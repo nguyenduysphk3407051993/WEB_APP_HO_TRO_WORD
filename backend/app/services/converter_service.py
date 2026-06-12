@@ -10,8 +10,10 @@ from pathlib import Path
 import pypandoc
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
-from docx.oxml.ns import qn
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls, qn
 from docx.shared import Cm, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
@@ -79,7 +81,18 @@ _UNICODE_TEX_REPLACEMENTS = {
     "—": "-",
     "−": "-",
 }
+
+# Màu tiền tố câu hỏi và marker phương án: #0070C0
 _QUESTION_PREFIX_COLOR = RGBColor(0x00, 0x70, 0xC0)
+_OPTION_PREFIX_COLOR   = RGBColor(0x00, 0x70, 0xC0)
+
+# Màu từ khoá lời giải: đỏ đậm #C60C4A
+_SOLUTION_KEYWORD_COLOR = RGBColor(0xC6, 0x0C, 0x4A)
+_SOLUTION_KEYWORDS_RE   = re.compile(
+    r"(Lời giải\s*[:.]|Hướng dẫn giải\s*[:.]|Đáp án\s*[:.:]?)",
+    re.IGNORECASE,
+)
+
 _DOCUMENT_FONT_NAME = "Times New Roman"
 _DOCUMENT_BODY_FONT_SIZE = 12
 _DOCUMENT_PAGE_WIDTH = Cm(21.59)
@@ -231,7 +244,7 @@ class ConverterService:
         return latex.strip()
 
     def postprocess_ocr_docx(self, docx_path: Path) -> Path:
-        """Hau xu ly DOCX OCR de dinh dang cau hoi, phuong an va y nho on dinh hon."""
+        """Hau xu ly DOCX OCR de dinh dang cau hoi, phuong an, bang, anh."""
         document = Document(docx_path)
         self._apply_document_geometry(document)
         self._apply_document_font(document)
@@ -257,12 +270,22 @@ class ConverterService:
             self._apply_segment_format(current, segments[0][0])
 
         self._layout_answer_choices(document)
+        self._format_solution_sections(document)
+        self._format_tables(document)
+        self._format_images(document)
+
+        for paragraph in document.paragraphs:
+            self._highlight_solution_keywords(paragraph)
+
         document.save(docx_path)
         return docx_path
 
+    # ──────────────────────────────────────────────────────────────
+    # Page geometry
+    # ──────────────────────────────────────────────────────────────
+
     @staticmethod
     def _apply_document_geometry(document: Document) -> None:
-        """Ap dung kich thuoc trang va le theo tai lieu de cuong mau."""
         for section in document.sections:
             section.page_width = _DOCUMENT_PAGE_WIDTH
             section.page_height = _DOCUMENT_PAGE_HEIGHT
@@ -271,8 +294,11 @@ class ConverterService:
             section.top_margin = _DOCUMENT_TOP_MARGIN
             section.bottom_margin = _DOCUMENT_BOTTOM_MARGIN
 
+    # ──────────────────────────────────────────────────────────────
+    # Font — Times New Roman toàn bộ
+    # ──────────────────────────────────────────────────────────────
+
     def _apply_document_font(self, document: Document) -> None:
-        """Dung Times New Roman cho toan tai lieu, giu cap co chu cua heading."""
         for style in document.styles:
             if style.type != WD_STYLE_TYPE.PARAGRAPH:
                 continue
@@ -294,8 +320,11 @@ class ConverterService:
                 for cell in row.cells:
                     yield from ConverterService._iter_document_paragraphs(cell)
 
+    # ──────────────────────────────────────────────────────────────
+    # Layout A–D answer choices (4-col / 2-col / 1-per-line)
+    # ──────────────────────────────────────────────────────────────
+
     def _layout_answer_choices(self, document: Document) -> None:
-        """Gom A-D thanh hang 2/4 cot voi tab stop theo tai lieu mau."""
         paragraphs = list(document.paragraphs)
         index = 0
 
@@ -326,32 +355,24 @@ class ConverterService:
                 for paragraph, _, _ in group[1:]:
                     self._remove_paragraph(paragraph)
             elif self._use_two_choice_columns(choices):
-                self._set_choice_row(
-                    group[0][0], choices[:2], _OPTION_TWO_COLUMN_TABS
-                )
-                self._set_choice_row(
-                    group[2][0], choices[2:], _OPTION_TWO_COLUMN_TABS
-                )
+                self._set_choice_row(group[0][0], choices[:2], _OPTION_TWO_COLUMN_TABS)
+                self._set_choice_row(group[2][0], choices[2:], _OPTION_TWO_COLUMN_TABS)
                 self._remove_paragraph(group[1][0])
                 self._remove_paragraph(group[3][0])
             else:
-                # 1 phương án/dòng: đã được format sẵn bởi _format_choice_paragraph
+                # 1 phương án/dòng — đã format bởi _format_choice_paragraph
                 index += 1
                 continue
 
             paragraphs = list(document.paragraphs)
             index = next(
-                (
-                    paragraph_index
-                    for paragraph_index, paragraph in enumerate(paragraphs)
-                    if paragraph._p is first_element
-                ),
+                (i for i, p in enumerate(paragraphs) if p._p is first_element),
                 index,
             ) + 1
 
     @staticmethod
     def _parse_choice(text: str) -> tuple[str, str] | None:
-        match = _OPTION_PREFIX_RE.match(text.strip())
+        match = _OPTION_PREFIX_RE.match((text or "").strip())
         if not match:
             return None
         return match.group(1), match.group(3).strip()
@@ -387,11 +408,7 @@ class ConverterService:
         fmt.line_spacing = 1
         self._reset_tab_stops(paragraph)
         for position in tab_positions:
-            fmt.tab_stops.add_tab_stop(
-                position,
-                WD_TAB_ALIGNMENT.LEFT,
-                WD_TAB_LEADER.SPACES,
-            )
+            fmt.tab_stops.add_tab_stop(position, WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
 
         for choice_index, (marker, content) in enumerate(choices):
             if choice_index:
@@ -399,8 +416,13 @@ class ConverterService:
                 self._set_run_font(tab_run)
             marker_run = paragraph.add_run(f"{marker}. ")
             self._set_run_font(marker_run, bold=True)
+            marker_run.font.color.rgb = _OPTION_PREFIX_COLOR
             content_run = paragraph.add_run(content)
             self._set_run_font(content_run, bold=False)
+
+    # ──────────────────────────────────────────────────────────────
+    # Paragraph structure: explode inline options/subitems
+    # ──────────────────────────────────────────────────────────────
 
     @staticmethod
     def _explode_structured_paragraph(text: str) -> list[tuple[str, str]]:
@@ -420,7 +442,7 @@ class ConverterService:
             question_text = text[: first_marker.start()].strip()
             if question_text:
                 segments.append(("question", question_text))
-            text = text[first_marker.start() :].strip()
+            text = text[first_marker.start():].strip()
 
         markers = list(_INLINE_STRUCTURE_RE.finditer(text))
         if not markers:
@@ -439,7 +461,7 @@ class ConverterService:
 
         for index, marker in enumerate(markers):
             end = markers[index + 1].start() if index + 1 < len(markers) else len(text)
-            chunk = text[marker.start() : end].strip()
+            chunk = text[marker.start(): end].strip()
             if not chunk:
                 continue
             kind = "option" if marker.group("option") else "subitem"
@@ -450,11 +472,9 @@ class ConverterService:
     def _apply_segment_format(self, paragraph: Paragraph, kind: str) -> None:
         if kind == "question":
             self._format_question_prefix(paragraph)
-            return
-        if kind == "option":
+        elif kind == "option":
             self._format_choice_paragraph(paragraph, is_subitem=False)
-            return
-        if kind == "subitem":
+        elif kind == "subitem":
             self._format_choice_paragraph(paragraph, is_subitem=True)
 
     def _format_question_prefix(self, paragraph: Paragraph) -> None:
@@ -464,7 +484,7 @@ class ConverterService:
             return
 
         prefix = match.group(1).strip()
-        remainder = text[match.end() :].lstrip()
+        remainder = text[match.end():].lstrip()
         self._clear_paragraph(paragraph)
 
         prefix_run = paragraph.add_run(prefix)
@@ -495,13 +515,262 @@ class ConverterService:
         fmt.space_after = Pt(3)
         fmt.line_spacing = 1
         self._reset_tab_stops(paragraph)
-        fmt.tab_stops.add_tab_stop(
-            _OPTION_LEFT_INDENT,
-            WD_TAB_ALIGNMENT.LEFT,
-            WD_TAB_LEADER.SPACES,
-        )
+        fmt.tab_stops.add_tab_stop(_OPTION_LEFT_INDENT, WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
         self._set_run_font(marker_run, bold=not is_subitem)
+        if not is_subitem:
+            marker_run.font.color.rgb = _OPTION_PREFIX_COLOR
         self._set_run_font(content_run, bold=False)
+
+    # ──────────────────────────────────────────────────────────────
+    # Highlight "Lời giải", "Hướng dẫn giải", "Đáp án" in đậm đỏ
+    # ──────────────────────────────────────────────────────────────
+
+    def _highlight_solution_keywords(self, paragraph: Paragraph) -> None:
+        runs = list(paragraph.runs)
+        for run in runs:
+            text = run.text
+            if not text:
+                continue
+
+            matches = list(_SOLUTION_KEYWORDS_RE.finditer(text))
+            if not matches:
+                continue
+
+            run_element = run._element
+            last_end = 0
+
+            for match in matches:
+                before_text = text[last_end: match.start()]
+                if before_text:
+                    new_run = paragraph.add_run(before_text)
+                    new_run.bold = run.bold
+                    new_run.italic = run.italic
+                    self._set_run_font(new_run)
+                    run_element.addprevious(new_run._element)
+
+                kw_run = paragraph.add_run(match.group(1))
+                kw_run.bold = True
+                kw_run.font.color.rgb = _SOLUTION_KEYWORD_COLOR
+                self._set_run_font(kw_run)
+                run_element.addprevious(kw_run._element)
+
+                last_end = match.end()
+
+            after_text = text[last_end:]
+            if after_text:
+                new_run = paragraph.add_run(after_text)
+                new_run.bold = run.bold
+                new_run.italic = run.italic
+                self._set_run_font(new_run)
+                run_element.addprevious(new_run._element)
+
+            paragraph._p.remove(run_element)
+
+    # ──────────────────────────────────────────────────────────────
+    # Format solution sections (indent/spacing inside Lời giải)
+    # ──────────────────────────────────────────────────────────────
+
+    def _format_solution_sections(self, document: Document) -> None:
+        in_solution = False
+        l1_re = re.compile(r"^([-*•–—]|a\)|b\)|c\)|d\)|\d+[.)])\s+(.*)$")
+        l2_re = re.compile(r"^([+])\s+(.*)$")
+        conclusion_re = re.compile(r"^(=>|Chọn|Đáp án:)\s*(.*)$", re.IGNORECASE)
+
+        for paragraph in document.paragraphs:
+            text = paragraph.text.strip()
+            if not text:
+                continue
+
+            if _QUESTION_PREFIX_RE.match(text) or text.startswith("#"):
+                in_solution = False
+                continue
+
+            if _SOLUTION_KEYWORDS_RE.match(text):
+                in_solution = True
+                fmt = paragraph.paragraph_format
+                fmt.space_before = Pt(6)
+                fmt.space_after = Pt(3)
+                fmt.line_spacing = 1.15
+                fmt.keep_with_next = True
+                continue
+
+            if not in_solution:
+                continue
+
+            fmt = paragraph.paragraph_format
+            fmt.space_before = Pt(2)
+            fmt.space_after = Pt(2)
+            fmt.line_spacing = 1.15
+
+            p_pr = paragraph._p.get_or_add_pPr()
+            num_pr = p_pr.find(qn("w:numPr"))
+            style_name = paragraph.style.name
+            is_native_list = (num_pr is not None) or style_name.startswith("List")
+
+            if is_native_list:
+                ilvl = 0
+                if num_pr is not None:
+                    ilvl_elem = num_pr.find(qn("w:ilvl"))
+                    if ilvl_elem is not None:
+                        try:
+                            ilvl = int(ilvl_elem.get(qn("w:val"), "0"))
+                        except ValueError:
+                            pass
+                else:
+                    if "2" in style_name or "3" in style_name:
+                        ilvl = 1
+                if ilvl > 0:
+                    fmt.left_indent = Cm(1.25)
+                    fmt.first_line_indent = Cm(-0.35)
+                else:
+                    fmt.left_indent = Cm(0.75)
+                    fmt.first_line_indent = Cm(-0.35)
+                continue
+
+            l1_match = l1_re.match(text)
+            l2_match = l2_re.match(text)
+            conclusion_match = conclusion_re.match(text)
+
+            if l1_match:
+                fmt.left_indent = Cm(0.75)
+                fmt.first_line_indent = Cm(-0.35)
+                self._reset_tab_stops(paragraph)
+                fmt.tab_stops.add_tab_stop(Cm(0.75), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
+                self._convert_manual_prefix_to_tab(paragraph, l1_match.group(1))
+            elif l2_match:
+                fmt.left_indent = Cm(1.25)
+                fmt.first_line_indent = Cm(-0.35)
+                self._reset_tab_stops(paragraph)
+                fmt.tab_stops.add_tab_stop(Cm(1.25), WD_TAB_ALIGNMENT.LEFT, WD_TAB_LEADER.SPACES)
+                self._convert_manual_prefix_to_tab(paragraph, l2_match.group(1))
+            elif conclusion_match:
+                fmt.left_indent = Cm(0.75)
+                fmt.first_line_indent = Pt(0)
+            else:
+                fmt.left_indent = Cm(0.75)
+                fmt.first_line_indent = Pt(0)
+
+    @staticmethod
+    def _convert_manual_prefix_to_tab(paragraph: Paragraph, prefix: str) -> None:
+        text_so_far = ""
+        for run in paragraph.runs:
+            if not run.text:
+                continue
+            text_so_far += run.text
+            if text_so_far.lstrip().startswith(prefix):
+                stripped = run.text.lstrip()
+                if stripped.startswith(prefix + " "):
+                    lead = run.text[: len(run.text) - len(stripped)]
+                    run.text = f"{lead}{prefix}\t{stripped[len(prefix) + 1:]}"
+                    break
+                elif stripped.startswith(prefix) and len(stripped) > len(prefix) and stripped[len(prefix)] in (" ", "\t"):
+                    lead = run.text[: len(run.text) - len(stripped)]
+                    rest = stripped[len(prefix):].lstrip(" \t")
+                    run.text = f"{lead}{prefix}\t{rest}"
+                    break
+
+    # ──────────────────────────────────────────────────────────────
+    # Tables: header shading, borders, cell padding
+    # ──────────────────────────────────────────────────────────────
+
+    def _format_tables(self, document: Document) -> None:
+        for table in document.tables:
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            try:
+                self._set_table_borders(table)
+            except Exception as exc:
+                logger.warning("Loi ve vien bang: %s", exc)
+
+            if not table.rows:
+                continue
+
+            # Header row
+            header_row = table.rows[0]
+            tr_pr = header_row._tr.get_or_add_trPr()
+            tr_pr.append(parse_xml(f'<w:tblHeader {nsdecls("w")}/>'))
+            tr_pr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+            for cell in header_row.cells:
+                self._set_cell_background(cell, "F2F2F2")
+                self._set_cell_margins(cell, top=100, bottom=100, left=150, right=150)
+                for para in cell.paragraphs:
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for run in para.runs:
+                        run.bold = True
+                        self._set_run_font(run, size=11)
+
+            # Body rows
+            for row in table.rows[1:]:
+                tr_pr = row._tr.get_or_add_trPr()
+                tr_pr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+                for cell in row.cells:
+                    self._set_cell_margins(cell, top=80, bottom=80, left=120, right=120)
+                    for para in cell.paragraphs:
+                        for run in para.runs:
+                            self._set_run_font(run, size=11)
+
+    @staticmethod
+    def _set_table_borders(table) -> None:
+        tbl_pr = table._tbl.tblPr
+        borders = tbl_pr.find(qn("w:tblBorders"))
+        if borders is not None:
+            tbl_pr.remove(borders)
+        tbl_pr.append(parse_xml(
+            f'<w:tblBorders {nsdecls("w")}>'
+            f'  <w:top    w:val="single" w:sz="4" w:space="0" w:color="D3D3D3"/>'
+            f'  <w:bottom w:val="single" w:sz="4" w:space="0" w:color="D3D3D3"/>'
+            f'  <w:left   w:val="none"/>'
+            f'  <w:right  w:val="none"/>'
+            f'  <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E0E0E0"/>'
+            f'  <w:insideV w:val="none"/>'
+            f'</w:tblBorders>'
+        ))
+
+    @staticmethod
+    def _set_cell_background(cell, hex_color: str) -> None:
+        shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
+        cell._tc.get_or_add_tcPr().append(shading)
+
+    @staticmethod
+    def _set_cell_margins(cell, *, top=100, bottom=100, left=150, right=150) -> None:
+        tc_pr = cell._tc.get_or_add_tcPr()
+        tc_pr.append(parse_xml(
+            f'<w:tcMar {nsdecls("w")}>'
+            f'  <w:top    w:w="{top}"    w:type="dxa"/>'
+            f'  <w:bottom w:w="{bottom}" w:type="dxa"/>'
+            f'  <w:left   w:w="{left}"   w:type="dxa"/>'
+            f'  <w:right  w:w="{right}"  w:type="dxa"/>'
+            f'</w:tcMar>'
+        ))
+
+    # ──────────────────────────────────────────────────────────────
+    # Images: căn giữa + giới hạn chiều rộng 12 cm
+    # ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _format_images(document: Document) -> None:
+        for paragraph in document.paragraphs:
+            has_drawing = any(
+                run._element.find(qn("w:drawing")) is not None
+                for run in paragraph.runs
+            )
+            if has_drawing:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                paragraph.paragraph_format.space_before = Pt(6)
+                paragraph.paragraph_format.space_after = Pt(6)
+
+        max_width = Cm(12.0)
+        for shape in document.inline_shapes:
+            try:
+                if shape.width > max_width:
+                    ratio = max_width / shape.width
+                    shape.width = max_width
+                    shape.height = int(shape.height * ratio)
+            except Exception:
+                pass
+
+    # ──────────────────────────────────────────────────────────────
+    # Paragraph helpers
+    # ──────────────────────────────────────────────────────────────
 
     @staticmethod
     def _set_font_family(font, r_pr) -> None:
@@ -562,6 +831,10 @@ class ConverterService:
         element = paragraph._element
         element.getparent().remove(element)
         paragraph._p = paragraph._element = None
+
+    # ──────────────────────────────────────────────────────────────
+    # Docx → LaTeX / MathType helpers
+    # ──────────────────────────────────────────────────────────────
 
     def docx_to_latex(self, docx_path: Path) -> str:
         """File .docx (chua OMML/Equation) -> LaTeX."""

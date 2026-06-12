@@ -64,22 +64,22 @@ export default function Dropzone({
         {...getRootProps()}
         className={`relative overflow-hidden rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-200
           ${isDragActive
-            ? "border-indigo-500 bg-indigo-500/10 scale-[1.01]"
+            ? "border-gold-400 bg-gold-400/10 scale-[1.01]"
             : hasFiles
             ? "border-emerald-500/50 bg-emerald-500/5"
-            : "border-slate-700 hover:border-indigo-500/50 hover:bg-indigo-500/5 bg-slate-800/50"
+            : "border-[#3d3018] hover:border-gold-600/60 hover:bg-gold-400/5 bg-[#1f1b0e]/50"
           }`}
       >
         {isDragActive && (
-          <div className="absolute inset-0 bg-indigo-500/5 animate-pulse pointer-events-none" />
+          <div className="absolute inset-0 bg-gold-400/5 animate-pulse pointer-events-none" />
         )}
         <input {...getInputProps()} />
 
         <div className="flex flex-col items-center gap-3">
           {isDragActive ? (
             <>
-              <DropIcon color="indigo" />
-              <p className="text-indigo-400 font-semibold">Thả file vào đây...</p>
+              <DropIcon />
+              <p className="text-gold-400 font-semibold">Thả file vào đây...</p>
             </>
           ) : hasFiles ? (
             <>
@@ -87,7 +87,7 @@ export default function Dropzone({
               {displayFiles.length === 1 ? (
                 <div>
                   <p className="font-semibold text-emerald-400 text-sm">{displayFiles[0].name}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-gold-700 mt-1">
                     {(displayFiles[0].size / 1024 / 1024).toFixed(2)} MB — Click để đổi file
                   </p>
                 </div>
@@ -96,14 +96,14 @@ export default function Dropzone({
                   <p className="font-semibold text-emerald-400 text-sm">
                     {displayFiles.length} file đã chọn
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-gold-700 mt-1">
                     {displayFiles
                       .slice(0, 3)
                       .map((f) => f.name)
                       .join(", ")}
                     {displayFiles.length > 3 ? ` và ${displayFiles.length - 3} file khác` : ""}
                   </p>
-                  <p className="text-xs text-slate-600 mt-0.5">Click để thay đổi</p>
+                  <p className="text-xs text-gold-800 mt-0.5">Click để thay đổi</p>
                 </div>
               )}
             </>
@@ -111,20 +111,20 @@ export default function Dropzone({
             <>
               <UploadIcon />
               <div>
-                <p className="text-slate-300 font-medium text-sm">
+                <p className="text-[#f0dfa0] font-medium text-sm">
                   Kéo & thả {multiple ? "file(s)" : "file"} hoặc{" "}
-                  <span className="text-indigo-400 underline underline-offset-2">click để chọn</span>
+                  <span className="text-gold-400 underline underline-offset-2">click để chọn</span>
                 </p>
                 {allowPaste && (
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-gold-700 mt-1">
                     Hoặc nhấn{" "}
-                    <kbd className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[11px] font-mono">
+                    <kbd className="px-1.5 py-0.5 rounded bg-[#2a2412] text-gold-300 text-[11px] font-mono border border-[#3d3018]">
                       Ctrl+V
                     </kbd>{" "}
                     để dán từ clipboard
                   </p>
                 )}
-                {hint && <p className="text-xs text-slate-500 mt-1.5">{hint}</p>}
+                {hint && <p className="text-xs text-gold-700 mt-1.5">{hint}</p>}
               </div>
             </>
           )}
@@ -153,7 +153,7 @@ export default function Dropzone({
               <button
                 type="button"
                 onClick={() => folderRef.current?.click()}
-                className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+                className="flex items-center gap-2 rounded-lg border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2a2412] hover:text-[#f5e8b0] transition"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -183,7 +183,7 @@ export default function Dropzone({
                   // fallback: user can just Ctrl+V
                 }
               }}
-              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition"
+              className="flex items-center gap-2 rounded-lg border border-[#3d3018] bg-[#1f1b0e] px-3 py-2 text-xs font-medium text-gold-300 hover:bg-[#2a2412] hover:text-[#f5e8b0] transition"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -200,7 +200,7 @@ export default function Dropzone({
 
 function UploadIcon() {
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-700/80 text-slate-400">
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2a2412] text-gold-600">
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -209,9 +209,9 @@ function UploadIcon() {
   );
 }
 
-function DropIcon({ color = "indigo" }) {
+function DropIcon() {
   return (
-    <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${color}-500/20 text-${color}-400`}>
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold-400/20 text-gold-400">
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />

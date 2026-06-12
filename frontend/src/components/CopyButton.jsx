@@ -25,7 +25,7 @@ export default function CopyButton({ text, label = "Copy" }) {
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all
         ${copied
           ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-          : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white border border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+          : "bg-[#2a2412] text-gold-300 hover:bg-[#3d3018] hover:text-[#f5e8b0] border border-[#3d3018] disabled:opacity-40 disabled:cursor-not-allowed"
         }`}
     >
       {copied ? (
