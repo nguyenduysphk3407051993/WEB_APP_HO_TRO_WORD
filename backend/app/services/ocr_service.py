@@ -620,11 +620,17 @@ class OCRService:
 
                 # ── Hình vector (hình học, đồ thị): cluster các nét gần nhau ──
                 try:
-                    vec_rects = [
-                        fitz.Rect(d["rect"])
-                        for d in page.get_drawings()
-                        if d.get("rect") and not fitz.Rect(d["rect"]).is_empty
-                    ]
+                    vec_rects = []
+                    for d in page.get_drawings():
+                        r = d.get("rect")
+                        if not r:
+                            continue
+                        rr = fitz.Rect(r)
+                        # Giữ cả đường thẳng ngang/dọc (w=0 hoặc h=0) — chỉ bỏ điểm.
+                        # is_empty coi line là rỗng nên KHÔNG dùng ở đây.
+                        if rr.width <= 0 and rr.height <= 0:
+                            continue
+                        vec_rects.append(rr)
                     for cluster, count in self._cluster_rects(vec_rects, margin=6):
                         if count >= self._FIG_MIN_PATHS and self._is_real_figure(cluster, page_rect):
                             regions.append(cluster)
